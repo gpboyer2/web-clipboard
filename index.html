@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>剪贴板同步</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            width: 100%;
+            max-width: 400px;
+            padding: 30px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 24px;
+        }
+
+        .status {
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 20px;
+            padding: 8px;
+            border-radius: 8px;
+            background: #f5f5f5;
+        }
+
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .input-wrapper {
+            position: relative;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 200px;
+            padding: 15px;
+            padding-bottom: 60px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            font-size: 16px;
+            resize: vertical;
+            transition: border-color 0.3s;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        /* 键盘工具栏 */
+        .keyboard-toolbar {
+            position: absolute;
+            bottom: 8px;
+            left: 8px;
+            right: 8px;
+            display: flex;
+            gap: 8px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 6px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .keyboard-toolbar button {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .keyboard-toolbar button:active {
+            transform: scale(0.95);
+        }
+
+        .btn-newline {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .btn-confirm {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .btn-group button {
+            flex: 1;
+            padding: 15px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .btn-group button:active {
+            transform: scale(0.98);
+        }
+
+        .btn-get {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .btn-clear {
+            background: #f0f0f0;
+            color: #666;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 30px;
+            font-size: 14px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        .toast.show {
+            opacity: 1;
+        }
+
+        .quick-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 15px;
+        }
+
+        .quick-btn {
+            padding: 8px 12px;
+            background: #f5f5f5;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .quick-btn:active {
+            background: #e0e0e0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📱 剪贴板同步</h1>
+        <div class="status" id="status">连接中...</div>
+
+        <div class="input-wrapper">
+            <textarea id="text" placeholder="在这里输入要发送到 Mac 的文字..."></textarea>
+            <div class="keyboard-toolbar">
+                <button class="btn-newline" onclick="insertNewline()">⏎ 换行</button>
+                <button class="btn-confirm" onclick="sendAndClear()">✓ 确定发送</button>
+            </div>
+        </div>
+
+        <div class="btn-group">
+            <button class="btn-get" onclick="getMac()">获取 Mac</button>
+            <button class="btn-clear" onclick="clearText()">清空</button>
+        </div>
+
+        <!-- 快捷操作 -->
+        <div class="quick-actions">
+            <button class="quick-btn" onclick="insertText('我的邮箱是')">邮箱</button>
+            <button class="quick-btn" onclick="insertText('我的电话是')">电话</button>
+            <button class="quick-btn" onclick="insertText('我的地址是')">地址</button>
+            <button class="quick-btn" onclick="insertText(Date.now().toString())">时间戳</button>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const API_BASE = window.location.origin;
+
+        // 检查连接
+        async function checkConnection() {
+            try {
+                const res = await fetch(`${API_BASE}/ping`);
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    document.getElementById('status').textContent = '✅ 已连接到 Mac';
+                    document.getElementById('status').className = 'status connected';
+                }
+            } catch (e) {
+                document.getElementById('status').textContent = '❌ 无法连接到 Mac';
+                document.getElementById('status').className = 'status error';
+            }
+        }
+
+        // 插入换行
+        function insertNewline() {
+            const textarea = document.getElementById('text');
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            const text = textarea.value;
+
+            textarea.value = text.substring(0, start) + '\n' + text.substring(end);
+            textarea.selectionStart = textarea.selectionEnd = start + 1;
+            textarea.focus();
+        }
+
+        // 发送并清空
+        async function sendAndClear() {
+            const textarea = document.getElementById('text');
+            const text = textarea.value;
+            if (!text.trim()) {
+                showToast('请输入内容');
+                return;
+            }
+
+            // 发送前先清空，避免被输入法复制
+            const textToSend = text;
+            textarea.value = '';
+
+            try {
+                const res = await fetch(`${API_BASE}/send`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: textToSend })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('✅ 已发送到 Mac！');
+                    // 保持键盘打开，重新聚焦
+                    textarea.focus();
+                } else {
+                    showToast('❌ 发送失败: ' + data.message);
+                    textarea.focus();
+                }
+            } catch (e) {
+                showToast('❌ 网络错误');
+                textarea.focus();
+            }
+        }
+
+        // 获取 Mac 剪贴板
+        async function getMac() {
+            try {
+                const res = await fetch(`${API_BASE}/get`);
+                const data = await res.json();
+                if (data.success && data.text) {
+                    document.getElementById('text').value = data.text;
+                    showToast('✅ 已获取 Mac 剪贴板');
+                }
+            } catch (e) {
+                showToast('❌ 获取失败');
+            }
+        }
+
+        // 清空
+        function clearText() {
+            document.getElementById('text').value = '';
+        }
+
+        // 插入文本
+        function insertText(text) {
+            const textarea = document.getElementById('text');
+            textarea.value = text;
+            textarea.focus();
+        }
+
+        // 显示提示
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 2000);
+        }
+
+        // 页面加载时检查连接
+        checkConnection();
+        setInterval(checkConnection, 10000);
+    </script>
+</body>
+</html>
