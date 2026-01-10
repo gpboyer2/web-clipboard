@@ -317,9 +317,14 @@
             setTimeout(() => toast.classList.remove('show'), 2000);
         }
 
-        // 页面加载时检查连接
+        // 页面加载时检查连接并自动聚焦输入框
         checkConnection();
         setInterval(checkConnection, 10000);
+
+        // 自动聚焦并弹出键盘
+        window.addEventListener('load', () => {
+            document.getElementById('text').focus();
+        });
     </script>
 </body>
 </html>
