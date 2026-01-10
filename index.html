@@ -13,12 +13,26 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+            background-attachment: fixed !important;
             min-height: 100vh;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 20px;
+        }
+
+        .container-wrapper {
+            width: 100%;
+            max-width: 400px;
+            max-height: 100%;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
         }
 
         .container {
@@ -59,13 +73,13 @@
 
         .input-wrapper {
             position: relative;
+            margin-bottom: 10px;
         }
 
         textarea {
             width: 100%;
-            min-height: 200px;
+            min-height: 210px;
             padding: 15px;
-            padding-bottom: 60px;
             border: 2px solid #e0e0e0;
             border-radius: 12px;
             font-size: 16px;
@@ -80,41 +94,34 @@
 
         /* 键盘工具栏 */
         .keyboard-toolbar {
-            position: absolute;
-            bottom: 8px;
-            left: 8px;
-            right: 8px;
             display: flex;
-            gap: 8px;
-            background: #f8f9fa;
-            border-radius: 8px;
-            padding: 6px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            gap: 10px;
         }
 
         .keyboard-toolbar button {
-            flex: 1;
-            padding: 10px;
             border: none;
-            border-radius: 6px;
-            font-size: 14px;
+            border-radius: 12px;
+            font-size: 16px;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s;
+            padding: 15px;
         }
 
         .keyboard-toolbar button:active {
-            transform: scale(0.95);
+            transform: scale(0.98);
         }
 
         .btn-newline {
             background: #e3f2fd;
             color: #1976d2;
+            flex: 1;
         }
 
         .btn-confirm {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
+            flex: 2;
         }
 
         .btn-group {
@@ -191,16 +198,19 @@
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="container-wrapper">
+        <div class="container">
         <h1>📱 剪贴板同步</h1>
         <div class="status" id="status">连接中...</div>
 
         <div class="input-wrapper">
             <textarea id="text" placeholder="在这里输入要发送到 Mac 的文字..."></textarea>
-            <div class="keyboard-toolbar">
-                <button class="btn-newline" onclick="insertNewline()">⏎ 换行</button>
-                <button class="btn-confirm" onclick="sendAndClear()">✓ 确定发送</button>
-            </div>
+        </div>
+
+        <!-- 键盘工具栏 -->
+        <div class="keyboard-toolbar">
+            <button class="btn-newline" onclick="insertNewline()">⏎ 换行</button>
+            <button class="btn-confirm" onclick="sendAndClear()">✓ 确定发送</button>
         </div>
 
         <div class="btn-group">
@@ -215,6 +225,7 @@
             <button class="quick-btn" onclick="insertText('我的地址是')">地址</button>
             <button class="quick-btn" onclick="insertText(Date.now().toString())">时间戳</button>
         </div>
+    </div>
     </div>
 
     <div class="toast" id="toast"></div>
