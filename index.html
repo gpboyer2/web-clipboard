@@ -195,6 +195,57 @@
         .quick-btn:active {
             background: #e0e0e0;
         }
+
+        /* 历史记录 */
+        .history-section {
+            margin-top: 15px;
+        }
+
+        .history-header {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .history-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .history-item {
+            padding: 10px 12px;
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background 0.2s;
+            overflow: hidden;
+        }
+
+        .history-item:active {
+            background: #e3f2fd;
+            border-color: #667eea;
+        }
+
+        .history-preview {
+            color: #333;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.4;
+            max-height: 2.8em;
+        }
+
+        .history-time {
+            font-size: 11px;
+            color: #999;
+            margin-top: 4px;
+        }
     </style>
 </head>
 <body>
@@ -211,6 +262,12 @@
         <div class="keyboard-toolbar">
             <button class="btn-newline" onclick="insertNewline()">⏎ 换行</button>
             <button class="btn-confirm" onclick="sendAndClear()">✓ 确定发送</button>
+        </div>
+
+        <!-- 历史记录列表 -->
+        <div class="history-section" id="historySection" style="display: none;">
+            <div class="history-header">历史记录</div>
+            <div class="history-list" id="historyList"></div>
         </div>
 
         <div class="btn-group">
@@ -266,6 +323,7 @@
             const text = textarea.value;
             if (!text.trim()) {
                 showToast('请输入内容');
+                textarea.focus();
                 return;
             }
 
@@ -282,6 +340,8 @@
                 const data = await res.json();
                 if (data.success) {
                     showToast('✅ 已发送到 Mac！');
+                    // 刷新历史记录
+                    loadHistory();
                     // 保持键盘打开，重新聚焦
                     textarea.focus();
                 } else {
@@ -328,6 +388,80 @@
             setTimeout(() => toast.classList.remove('show'), 2000);
         }
 
+        // 加载历史记录
+        async function loadHistory() {
+            try {
+                const res = await fetch(`${API_BASE}/history`);
+                const data = await res.json();
+                if (data.success && data.list.length > 0) {
+                    renderHistory(data.list);
+                }
+            } catch (e) {
+                console.error('加载历史失败', e);
+            }
+        }
+
+        // 渲染历史记录列表
+        function renderHistory(list) {
+            const container = document.getElementById('historySection');
+            const listEl = document.getElementById('historyList');
+            listEl.innerHTML = '';
+
+            list.forEach(item => {
+                const timeStr = formatTime(item.filename);
+                const div = document.createElement('div');
+                div.className = 'history-item';
+                div.innerHTML = `
+                    <div class="history-preview">${escapeHtml(item.preview)}</div>
+                    <div class="history-time">${timeStr}</div>
+                `;
+                div.onclick = () => resendHistory(item.content);
+                listEl.appendChild(div);
+            });
+
+            container.style.display = 'block';
+        }
+
+        // 格式化时间戳文件名
+        function formatTime(filename) {
+            const match = filename.match(/(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/);
+            if (match) {
+                const [, year, month, day, hour, min, sec] = match;
+                return `${month}/${day} ${hour}:${min}`;
+            }
+            return filename;
+        }
+
+        // 转义 HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // 重新发送历史记录
+        async function resendHistory(content) {
+            const textarea = document.getElementById('text');
+            textarea.value = content;
+
+            try {
+                const res = await fetch(`${API_BASE}/send`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: content })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('✅ 已重新发送！');
+                    textarea.focus();
+                } else {
+                    showToast('❌ 发送失败: ' + data.message);
+                }
+            } catch (e) {
+                showToast('❌ 网络错误');
+            }
+        }
+
         // 页面加载时检查连接并自动聚焦输入框
         checkConnection();
         setInterval(checkConnection, 10000);
@@ -335,6 +469,8 @@
         // 自动聚焦并弹出键盘
         window.addEventListener('load', () => {
             document.getElementById('text').focus();
+            // 加载历史记录
+            loadHistory();
         });
     </script>
 </body>
