@@ -441,9 +441,6 @@
 
         // 重新发送历史记录
         async function resendHistory(content) {
-            const textarea = document.getElementById('text');
-            textarea.value = content;
-
             try {
                 const res = await fetch(`${API_BASE}/send`, {
                     method: 'POST',
@@ -452,8 +449,8 @@
                 });
                 const data = await res.json();
                 if (data.success) {
-                    showToast('✅ 已重新发送！');
-                    textarea.focus();
+                    showToast('✅ 已重新发送');
+                    loadHistory();
                 } else {
                     showToast('❌ 发送失败: ' + data.message);
                 }
