@@ -9,9 +9,9 @@ const http = require('http');
 const WebSocket = require('ws');
 const fs = require('fs').promises;
 const path = require('path');
-const os = require('os');
 const { exec } = require('child_process');
 const { promisify } = require('util');
+const { generateQRCode, getLocalIP } = require('./utils');
 
 const execAsync = promisify(exec);
 
@@ -219,35 +219,29 @@ app.get('/get', async (req, res) => {
     res.json({ success: true, text });
 });
 
-// 获取本机 IP
-function getLocalIP() {
-    const interfaces = os.networkInterfaces();
-    for (const name of Object.keys(interfaces)) {
-        for (const iface of interfaces[name]) {
-            if (iface.family === 'IPv4' && !iface.internal) {
-                return iface.address;
-            }
-        }
-    }
-    return 'localhost';
-}
-
 // 启动服务器
 async function start() {
     await ensureHistoryDir();
     
-    server.listen(PORT, '0.0.0.0', () => {
+    server.listen(PORT, '0.0.0.0', async () => {
         const localIP = getLocalIP();
+        const url = `http://${localIP}:${PORT}`;
+        
         console.log('\n' + '='.repeat(50));
         console.log('     📱 本地模式 - Mac 直接当服务器');
         console.log('='.repeat(50));
         console.log(`本机访问: http://localhost:${PORT}`);
-        console.log(`手机访问: http://${localIP}:${PORT}`);
+        console.log(`手机访问: ${url}`);
         console.log('='.repeat(50) + '\n');
         console.log('💡 使用说明:');
         console.log('   - 手机和 Mac 需在同一局域网');
         console.log('   - 手机访问上面的地址即可同步剪贴板');
         console.log('   - Mac 会自动同步到系统剪贴板\n');
+        
+        // 显示二维码
+        console.log('📱 手机扫码访问:');
+        const qrcode = await generateQRCode(url);
+        console.log(qrcode);
     });
 }
 
