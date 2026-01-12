@@ -4,8 +4,13 @@
   "description": "多设备实时同步剪贴板 - WebSocket 版本",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "start": "node server-local.js",
+    "start:local": "node server-local.js",
+    "start:remote": "node server-remote.js",
+    "client:mac": "node client-mac.js",
+    "client:windows": "node client-windows.js",
+    "dev:local": "nodemon server-local.js",
+    "dev:remote": "nodemon server-remote.js"
   },
   "keywords": [
     "clipboard",

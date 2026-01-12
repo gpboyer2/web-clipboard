@@ -1,8 +1,9 @@
 #!/bin/bash
-# Web Clipboard 启动脚本 (Node.js 版本)
+# Web Clipboard 启动脚本 - 连接远程服务器
+# Mac 客户端连接远程服务器，自动同步剪贴板
 
 echo "╔═══════════════════════════════════════╗"
-echo "║  Web Clipboard Server (Node.js)      ║"
+echo "║  Web Clipboard - 连接远程服务器      ║"
 echo "╚═══════════════════════════════════════╝"
 echo ""
 
@@ -21,15 +22,8 @@ if [ ! -d "node_modules" ]; then
     npm install
 fi
 
-# 检查并清理端口 5001
-PORT=5001
-PID=$(lsof -ti:$PORT 2>/dev/null)
-if [ -n "$PID" ]; then
-    echo "🔄 端口 $PORT 被占用 (PID: $PID)，正在终止..."
-    kill -9 $PID
-    sleep 1
-fi
-
-# 启动服务器
-echo "🚀 启动服务器..."
-node server.js
+# 启动 Mac 监听客户端
+echo "🚀 启动 Mac 监听客户端..."
+echo "💡 将连接到远程服务器: ws://156.245.200.31:5001"
+echo ""
+node client-mac.js
