@@ -16,7 +16,11 @@ const DEVICE_NAME = 'Mac';
 
 let ws = null;
 let reconnectTimer = null;
+let heartbeatTimer = null; // 心跳检测定时器
 let isConnected = false;
+let lastHeartbeat = Date.now(); // 记录最后收到服务器消息的时间
+const HEARTBEAT_CHECK_INTERVAL = 60000; // 60秒检查一次心跳
+const HEARTBEAT_TIMEOUT = 90000; // 90秒无响应则重连
 
 // 设置 Mac 剪贴板
 async function setClipboard(text) {
@@ -50,6 +54,7 @@ function connect() {
         
         ws.on('open', () => {
             isConnected = true;
+            lastHeartbeat = Date.now();
             console.log('✅ 已连接到服务器');
             console.log('📱 等待接收剪贴板消息...\n');
             
@@ -60,8 +65,15 @@ function connect() {
             }
         });
         
+        // 处理 ping - 自动响应 pong
+        ws.on('ping', () => {
+            lastHeartbeat = Date.now();
+            console.log('💓 收到服务器心跳 ping，已自动响应 pong');
+        });
+        
         ws.on('message', async (data) => {
             try {
+                lastHeartbeat = Date.now(); // 更新心跳时间
                 const message = JSON.parse(data.toString());
                 await handleMessage(message);
             } catch (err) {
@@ -73,11 +85,14 @@ function connect() {
             isConnected = false;
             console.log('❌ 连接已断开');
             
-            // 3秒后自动重连
-            reconnectTimer = setTimeout(() => {
-                console.log('🔄 尝试重新连接...\n');
-                connect();
-            }, 3000);
+            // 只有在没有手动触发重连时才自动重连
+            if (!reconnectTimer) {
+                reconnectTimer = setTimeout(() => {
+                    console.log('🔄 尝试重新连接...\n');
+                    reconnectTimer = null;
+                    connect();
+                }, 3000);
+            }
         });
         
         ws.on('error', (err) => {
@@ -146,8 +161,15 @@ async function sendClipboard() {
 function gracefulShutdown() {
     console.log('\n\n🛑 正在退出...');
     
+    // 清理所有定时器
     if (reconnectTimer) {
         clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+    }
+    
+    if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
     }
     
     if (ws) {
@@ -175,6 +197,35 @@ console.log('═'.repeat(41) + '\n');
 
 // 启动连接
 connect();
+
+// 心跳检测 - 定期检查是否收到服务器消息
+heartbeatTimer = setInterval(() => {
+    const timeSinceLastHeartbeat = Date.now() - lastHeartbeat;
+    
+    if (isConnected && timeSinceLastHeartbeat > HEARTBEAT_TIMEOUT) {
+        console.log(`\n⚠️  心跳超时 (${Math.floor(timeSinceLastHeartbeat / 1000)}秒未收到服务器消息)`);
+        console.log('🔄 主动断开并重连...\n');
+        
+        // 清除可能存在的重连定时器，避免竞态条件
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+        }
+        
+        // 强制断开并重连
+        isConnected = false;
+        if (ws) {
+            ws.terminate();
+            ws = null;
+        }
+        connect();
+    } else if (isConnected) {
+        // 只在心跳异常时才输出日志，减少噪音
+        if (timeSinceLastHeartbeat > 45000) {
+            console.log(`⚠️  心跳延迟 (距上次: ${Math.floor(timeSinceLastHeartbeat / 1000)}秒)`);
+        }
+    }
+}, HEARTBEAT_CHECK_INTERVAL);
 
 // 可选：监听本地剪贴板变化并主动发送（高级功能）
 // 取消注释下面的代码启用此功能
