@@ -7,7 +7,7 @@
     "start": "node server-local.js",
     "start:local": "node server-local.js",
     "start:remote": "node server-remote.js",
-    "client:mac": "node client-mac.js",
+    "client:mac": "node start-connect-remote.js",
     "client:windows": "node client-windows.js",
     "dev:local": "nodemon server-local.js",
     "dev:remote": "nodemon server-remote.js"
