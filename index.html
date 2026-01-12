@@ -271,7 +271,7 @@
         </div>
 
         <div class="btn-group">
-            <button class="btn-get" onclick="getMac()">获取 Mac</button>
+            <button class="btn-get" onclick="getMac()">刷新历史</button>
             <button class="btn-clear" onclick="clearText()">清空</button>
         </div>
 
@@ -289,19 +289,100 @@
 
     <script>
         const API_BASE = window.location.origin;
+        let ws = null;
+        let reconnectTimer = null;
+        let onlineCount = 0;
 
-        // 检查连接
+        // WebSocket 连接
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}`;
+            
+            try {
+                ws = new WebSocket(wsUrl);
+                
+                ws.onopen = () => {
+                    console.log('✅ WebSocket 已连接');
+                    updateStatus('connected', '✅ 已连接到服务器');
+                    
+                    // 清除重连定时器
+                    if (reconnectTimer) {
+                        clearTimeout(reconnectTimer);
+                        reconnectTimer = null;
+                    }
+                };
+                
+                ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        handleWebSocketMessage(data);
+                    } catch (e) {
+                        console.error('解析消息失败:', e);
+                    }
+                };
+                
+                ws.onclose = () => {
+                    console.log('❌ WebSocket 断开');
+                    updateStatus('error', '❌ 连接已断开');
+                    
+                    // 3秒后自动重连
+                    reconnectTimer = setTimeout(() => {
+                        console.log('🔄 尝试重新连接...');
+                        connectWebSocket();
+                    }, 3000);
+                };
+                
+                ws.onerror = (error) => {
+                    console.error('WebSocket 错误:', error);
+                    updateStatus('error', '❌ 连接错误');
+                };
+            } catch (e) {
+                console.error('创建 WebSocket 失败:', e);
+                updateStatus('error', '❌ 无法连接');
+            }
+        }
+        
+        // 处理 WebSocket 消息
+        function handleWebSocketMessage(data) {
+            switch (data.type) {
+                case 'connected':
+                    showToast(data.message);
+                    break;
+                    
+                case 'online':
+                    onlineCount = data.count;
+                    updateStatus('connected', `✅ 已连接 (在线: ${onlineCount})`);
+                    break;
+                    
+                case 'clipboard':
+                    // 收到其他设备的剪贴板内容
+                    const textarea = document.getElementById('text');
+                    textarea.value = data.text;
+                    showToast(`📨 收到来自 ${data.from} 的剪贴板`);
+                    // 刷新历史记录
+                    loadHistory();
+                    break;
+            }
+        }
+        
+        // 更新状态显示
+        function updateStatus(type, text) {
+            const status = document.getElementById('status');
+            status.textContent = text;
+            status.className = type === 'connected' ? 'status connected' : 'status error';
+        }
+
+        // 检查连接（保留用于降级）
         async function checkConnection() {
             try {
                 const res = await fetch(`${API_BASE}/ping`);
                 const data = await res.json();
                 if (data.status === 'ok') {
-                    document.getElementById('status').textContent = '✅ 已连接到 Mac';
-                    document.getElementById('status').className = 'status connected';
+                    onlineCount = data.online || 0;
+                    updateStatus('connected', `✅ 服务器运行中 (在线: ${onlineCount})`);
                 }
             } catch (e) {
-                document.getElementById('status').textContent = '❌ 无法连接到 Mac';
-                document.getElementById('status').className = 'status error';
+                updateStatus('error', '❌ 无法连接到服务器');
             }
         }
 
@@ -332,40 +413,58 @@
             textarea.value = '';
 
             try {
-                const res = await fetch(`${API_BASE}/send`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: textToSend })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    showToast('✅ 已发送到 Mac！');
+                // 优先使用 WebSocket 发送
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'clipboard',
+                        text: textToSend,
+                        from: getDeviceName(),
+                        timestamp: Date.now()
+                    }));
+                    showToast('✅ 已发送给所有设备！');
                     // 刷新历史记录
                     loadHistory();
                     // 保持键盘打开，重新聚焦
                     textarea.focus();
                 } else {
-                    showToast('❌ 发送失败: ' + data.message);
-                    textarea.focus();
+                    // 降级到 HTTP 请求
+                    const res = await fetch(`${API_BASE}/send`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text: textToSend })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        showToast('✅ 已发送给所有设备！');
+                        // 刷新历史记录
+                        loadHistory();
+                        // 保持键盘打开，重新聚焦
+                        textarea.focus();
+                    } else {
+                        showToast('❌ 发送失败: ' + data.message);
+                        textarea.focus();
+                    }
                 }
             } catch (e) {
                 showToast('❌ 网络错误');
                 textarea.focus();
             }
         }
+        
+        // 获取设备名称
+        function getDeviceName() {
+            const ua = navigator.userAgent;
+            if (/iPhone|iPad|iPod/i.test(ua)) return 'iPhone';
+            if (/Android/i.test(ua)) return 'Android';
+            if (/Mac/i.test(ua)) return 'Mac';
+            if (/Windows/i.test(ua)) return 'Windows';
+            return '未知设备';
+        }
 
-        // 获取 Mac 剪贴板
+        // 获取剪贴板（已废弃，保留按钮功能改为刷新历史）
         async function getMac() {
-            try {
-                const res = await fetch(`${API_BASE}/get`);
-                const data = await res.json();
-                if (data.success && data.text) {
-                    document.getElementById('text').value = data.text;
-                    showToast('✅ 已获取 Mac 剪贴板');
-                }
-            } catch (e) {
-                showToast('❌ 获取失败');
-            }
+            showToast('💡 剪贴板会自动同步，无需手动获取');
+            loadHistory();
         }
 
         // 清空
@@ -459,15 +558,24 @@
             }
         }
 
-        // 页面加载时检查连接并自动聚焦输入框
-        checkConnection();
-        setInterval(checkConnection, 10000);
+        // 页面加载时连接 WebSocket
+        connectWebSocket();
+        
+        // 定期检查连接（降级）
+        setInterval(checkConnection, 30000);
 
         // 自动聚焦并弹出键盘
         window.addEventListener('load', () => {
             document.getElementById('text').focus();
             // 加载历史记录
             loadHistory();
+        });
+        
+        // 页面关闭时断开 WebSocket
+        window.addEventListener('beforeunload', () => {
+            if (ws) {
+                ws.close();
+            }
         });
     </script>
 </body>

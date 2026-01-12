@@ -1,0 +1,25 @@
+{
+  "name": "web-clipboard",
+  "version": "2.0.0",
+  "description": "多设备实时同步剪贴板 - WebSocket 版本",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": [
+    "clipboard",
+    "websocket",
+    "sync",
+    "real-time"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.14.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
