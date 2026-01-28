@@ -14,7 +14,7 @@
     "client:windows": "node client-windows.js",
     "dev:local": "nodemon server-local.js",
     "dev:remote": "nodemon server-remote.js",
-    "pkg:build": "pkg client-windows-interactive.js --targets node22-win-x64 --output dist/web-clipboard-win.exe",
+    "pkg:build": "pkg client-windows-interactive.js --targets node18-win-x64 --output dist/web-clipboard-win.exe",
     "pkg:clean": "rm -rf dist"
   },
   "keywords": [
