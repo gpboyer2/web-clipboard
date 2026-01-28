@@ -14,9 +14,8 @@
     "client:windows": "node client-windows.js",
     "dev:local": "nodemon server-local.js",
     "dev:remote": "nodemon server-remote.js",
-    "pkg:build": "pkg client-windows-interactive.js --config pkg-config.js --output release-build/pkg/win/web-clipboard-win.exe",
-    "pkg:build-debug": "pkg client-windows-interactive.js --config pkg-config.js --debug --output release-build/pkg/win/web-clipboard-win-debug.exe",
-    "pkg:clean": "rm -rf release-build/pkg/win"
+    "pkg:build:win": "pkg client-windows-interactive.js --config pkg-config.js --output release-build/pkg/win/web-clipboard-win.exe",
+    "pkg:clean": "rm -rf release-build/pkg"
   },
   "keywords": [
     "clipboard",

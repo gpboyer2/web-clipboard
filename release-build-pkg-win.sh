@@ -10,12 +10,12 @@ echo ""
 
 # Clean old build artifacts
 echo "Cleaning old build artifacts..."
-rm -rf release-build/pkg/win/
+rm -rf release-build/pkg/
 mkdir -p release-build/pkg/win/
 
 # Run pkg build
 echo "Building (Windows x64)..."
-npm run pkg:build
+npm run pkg:build:win
 
 # Check build result
 if [ -f "release-build/pkg/win/web-clipboard-win.exe" ]; then
