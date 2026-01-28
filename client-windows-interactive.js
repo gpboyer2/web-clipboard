@@ -13,7 +13,7 @@ const readline = require('readline');
  * 生成唯一的房间ID（随机8位字符）
  */
 function generateRoomId() {
-    return crypto.randomBytes(4).toString('hex');
+    return crypto.randomBytes(4).toString('hex').toUpperCase();
 }
 
 /**
@@ -76,7 +76,28 @@ async function main() {
     console.log('');
 
     // 启动客户端，传递环境变量
-    const clientScript = path.join(__dirname, 'client-windows.js');
+    // 处理PKG打包后的路径问题
+    let clientScript;
+    if (process.pkg) {
+        // PKG打包后的环境，使用snapshot路径
+        clientScript = path.join(process.cwd(), 'client-windows.js');
+    } else {
+        // 开发环境
+        clientScript = path.join(__dirname, 'client-windows.js');
+    }
+    
+    console.log(`📁 客户端脚本路径: ${clientScript}`);
+    
+    // 验证文件是否存在
+    const fs = require('fs');
+    if (!fs.existsSync(clientScript)) {
+        console.error(`❌ 客户端脚本不存在: ${clientScript}`);
+        console.error('当前工作目录:', process.cwd());
+        console.error('__dirname:', __dirname);
+        console.error('process.pkg:', !!process.pkg);
+        process.exit(1);
+    }
+    
     const client = spawn(process.execPath, [clientScript], {
         stdio: 'inherit',
         cwd: __dirname,

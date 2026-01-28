@@ -13,7 +13,7 @@ const clientScript = path.join(__dirname, 'client-mac.js');
 
 // 生成唯一的房间ID（随机8位字符）
 function generateRoomId() {
-    return crypto.randomBytes(4).toString('hex');
+    return crypto.randomBytes(4).toString('hex').toUpperCase();
 }
 
 const roomId = generateRoomId();

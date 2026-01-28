@@ -14,7 +14,8 @@
     "client:windows": "node client-windows.js",
     "dev:local": "nodemon server-local.js",
     "dev:remote": "nodemon server-remote.js",
-    "pkg:build": "pkg client-windows-interactive.js --targets node18-win-x64 --output dist/web-clipboard-win.exe",
+    "pkg:build": "pkg client-windows-interactive.js --config pkg-config.js --output dist/web-clipboard-win.exe",
+    "pkg:build-debug": "pkg client-windows-interactive.js --config pkg-config.js --debug --output dist/web-clipboard-win-debug.exe",
     "pkg:clean": "rm -rf dist"
   },
   "keywords": [
@@ -32,5 +33,18 @@
   "devDependencies": {
     "nodemon": "^3.0.1",
     "pkg": "^5.8.1"
+  },
+  "pkg": {
+    "assets": [
+      "client-windows.js",
+      "utils.js"
+    ],
+    "scripts": [
+      "client-windows.js",
+      "utils.js"
+    ],
+    "targets": [
+      "node18-win-x64"
+    ]
   }
 }

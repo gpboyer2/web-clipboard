@@ -10,6 +10,7 @@ const WebSocket = require('ws');
 const fs = require('fs').promises;
 const path = require('path');
 const { generateQRCode, getLocalIP } = require('./utils');
+const crypto = require('crypto');
 
 const app = express();
 const server = http.createServer(app);
@@ -99,6 +100,11 @@ const roomHeartbeats = new Map(); // Map<roomId, Map<ws, heartbeat>>
 
 // 默认房间ID（主房间/总房间）
 const DEFAULT_ROOM_ID = '';
+
+// 生成唯一的房间ID
+function generateRoomId() {
+    return crypto.randomBytes(4).toString('hex');
+}
 
 wss.on('connection', (ws, req) => {
     // 从URL参数解析房间ID
@@ -357,6 +363,29 @@ app.get('/history', async (req, res) => {
     res.json({ success: true, roomId: roomDisplay, list });
 });
 
+app.post('/generate-room', async (req, res) => {
+    const { room } = req.body;
+    const roomId = room || generateRoomId();
+    const urlWithRoom = `${req.protocol}://${req.get('host')}?room=${roomId}`;
+    
+    try {
+        const qrcode = await generateQRCode(urlWithRoom);
+        res.json({
+            success: true,
+            roomId,
+            url: urlWithRoom,
+            qrcode
+        });
+    } catch (err) {
+        res.json({
+            success: false,
+            roomId,
+            url: urlWithRoom,
+            error: err.message
+        });
+    }
+});
+
 app.post('/send', async (req, res) => {
     const { text, room } = req.body;
     const roomId = room || DEFAULT_ROOM_ID;
@@ -418,7 +447,8 @@ async function start() {
         const qrcode = await generateQRCode(baseUrl);
         console.log(qrcode);
         console.log('\n💡 提示: 在URL后添加 ?room=你的房间ID 来使用独立房间');
-        console.log('💡 主房间访问: 不添加参数或 ?room= (总房间)\n');
+        console.log('💡 主房间访问: 不添加参数或 ?room= (总房间)');
+        console.log('💡 生成新房间: POST /generate-room');
     });
 }
 
