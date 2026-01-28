@@ -9,5 +9,9 @@ __pycache__/
 # Node.js
 node_modules/
 
+# 构建输出
+dist/
+release-build/
+
 # macOS
 .DS_Store
