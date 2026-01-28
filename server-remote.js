@@ -101,11 +101,6 @@ const roomHeartbeats = new Map(); // Map<roomId, Map<ws, heartbeat>>
 // 默认房间ID（主房间/总房间）
 const DEFAULT_ROOM_ID = '';
 
-// 生成唯一的房间ID
-function generateRoomId() {
-    return crypto.randomBytes(4).toString('hex');
-}
-
 wss.on('connection', (ws, req) => {
     // 从URL参数解析房间ID
     const url = new URL(req.url, `http://${req.headers.host}`);
@@ -365,7 +360,7 @@ app.get('/history', async (req, res) => {
 
 app.post('/generate-room', async (req, res) => {
     const { room } = req.body;
-    const roomId = room || generateRoomId();
+    const roomId = room;
     const urlWithRoom = `${req.protocol}://${req.get('host')}?room=${roomId}`;
     
     try {

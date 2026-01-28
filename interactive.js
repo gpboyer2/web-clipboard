@@ -1,24 +1,21 @@
 #!/usr/bin/env node
 /**
- * Windows 客户端交互式启动入口
+ * 通用交互式启动入口
  * 打包后的主程序，提供用户交互界面，并直接运行客户端逻辑
+ *
+ * 支持多平台剪贴板工具:
+ * - macOS: pbcopy
+ * - Linux: xclip, xsel, wl-copy
+ * - Windows: PowerShell Set-Clipboard
  */
 
 const path = require('path');
-const crypto = require('crypto');
 const readline = require('readline');
 const WebSocket = require('ws');
 const { exec } = require('child_process');
 const { promisify } = require('util');
 
 const execAsync = promisify(exec);
-
-/**
- * 生成唯一的房间ID（随机8位字符）
- */
-function generateRoomId() {
-    return crypto.randomBytes(4).toString('hex').toUpperCase();
-}
 
 /**
  * 创建交互式输入界面
@@ -31,12 +28,37 @@ function createInterface() {
 }
 
 /**
+ * 验证房间ID格式
+ */
+function validateRoomId(roomId) {
+    if (!roomId) return true; // 空房间ID（主房间）有效
+    if (/^[A-Z0-9]{8}$/i.test(roomId)) return true;
+    return false;
+}
+
+/**
  * 询问用户房间ID
  */
 function askRoomId(rl) {
     return new Promise((resolve) => {
-        rl.question('请输入房间ID (直接回车生成随机房间): ', (answer) => {
-            const roomId = answer.trim() || generateRoomId();
+        rl.question('请输入房间ID (直接回车连接主房间): ', (answer) => {
+            const roomId = answer.trim();
+
+            // 验证房间ID格式
+            if (roomId && !validateRoomId(roomId)) {
+                console.log('⚠️  房间ID格式应为8位字母数字');
+                resolve('');
+                return;
+            }
+
+            // 主房间风险提示
+            if (!roomId) {
+                console.log('');
+                console.log('⚠️  注意：主房间为公共房间，您的剪贴板内容可能被其他用户看到');
+                console.log('   建议输入专属房间ID以保护隐私');
+                console.log('');
+            }
+
             resolve(roomId);
         });
     });
@@ -51,8 +73,63 @@ let currentServerUrl = '';
 let currentRoomId = '';
 
 /**
- * 设置 Windows 剪贴板
+ * 检测平台类型
  */
+function detectPlatform() {
+    const platform = process.platform;
+    if (platform === 'darwin') return 'macos';
+    if (platform === 'win32') return 'windows';
+    return 'linux';
+}
+
+/**
+ * 检测可用的剪贴板命令
+ */
+async function detectClipboardCommand() {
+    const platform = detectPlatform();
+    const commands = [];
+
+    if (platform === 'macos') {
+        commands.push({ cmd: 'pbcopy', type: 'macos', args: [] });
+    } else if (platform === 'windows') {
+        commands.push({ cmd: 'powershell', type: 'windows', args: ['-command', 'Set-Clipboard'] });
+    } else {
+        // Linux
+        commands.push({ cmd: 'wl-copy', type: 'wayland', args: [] });
+        commands.push({ cmd: 'xclip', type: 'x11', args: ['-selection', 'clipboard'] });
+        commands.push({ cmd: 'xsel', type: 'x11', args: ['--clipboard', '--input'] });
+    }
+
+    for (const { cmd, type, args } of commands) {
+        try {
+            if (platform === 'windows') {
+                // Windows PowerShell 默认可用，不需要检测
+                console.log(`✅ 检测到剪贴板工具: ${cmd} (${type})`);
+                return { cmd, type, args };
+            } else {
+                await execAsync(`which ${cmd}`);
+                console.log(`✅ 检测到剪贴板工具: ${cmd} (${type})`);
+                return { cmd, type, args };
+            }
+        } catch (err) {
+            // 命令不存在，继续尝试下一个
+        }
+    }
+
+    if (platform === 'macos') {
+        throw new Error('未找到 pbcopy 命令，macOS 系统应该自带此工具');
+    } else if (platform === 'windows') {
+        throw new Error('未找到 PowerShell，Windows 系统应该自带此工具');
+    } else {
+        throw new Error('未找到可用的剪贴板工具，请安装 xclip 或 xsel:\n  sudo apt install xclip\n  或\n  sudo apt install xsel');
+    }
+}
+
+/**
+ * 设置剪贴板（跨平台）
+ */
+let clipboardCommand = null;
+
 async function setClipboard(text) {
     try {
         if (typeof text !== 'string') {
@@ -60,12 +137,29 @@ async function setClipboard(text) {
         }
 
         if (text.length === 0) {
-            console.log('⚠️ 剪贴板内容为空，跳过设置');
+            console.log('⚠️  剪贴板内容为空，跳过设置');
             return true;
         }
 
-        const escapedText = text.replace(/"/g, '`"').replace(/\$/g, '`$');
-        const command = `powershell -command "Set-Clipboard -Value \\"${escapedText}\\""`;
+        // 首次使用时检测剪贴板命令
+        if (!clipboardCommand) {
+            clipboardCommand = await detectClipboardCommand();
+        }
+
+        const { cmd, type, args } = clipboardCommand;
+        let command;
+
+        if (type === 'macos') {
+            const escapedText = text.replace(/"/g, '\\"');
+            command = `echo "${escapedText}" | ${cmd}`;
+        } else if (type === 'windows') {
+            const escapedText = text.replace(/"/g, '`"').replace(/\$/g, '`$');
+            command = `${cmd} ${args.join(' ')} -Value \\"${escapedText}\\"`;
+        } else {
+            // Linux
+            const escapedText = text.replace(/"/g, '\\"').replace(/\$/g, '\\$');
+            command = `echo "${escapedText}" | ${cmd} ${args.join(' ')}`;
+        }
 
         await execAsync(command);
         console.log(`✅ 已同步到系统剪贴板: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
@@ -83,14 +177,17 @@ function connect(serverUrl, roomId) {
     currentServerUrl = serverUrl;
     currentRoomId = roomId;
 
-    const wsUrl = serverUrl.includes('?')
-        ? `${serverUrl}&room=${roomId}`
-        : `${serverUrl}?room=${roomId}`;
+    // 构建带房间ID的WebSocket URL（只有指定房间时才添加room参数）
+    const wsUrl = roomId
+        ? (serverUrl.includes('?')
+            ? `${serverUrl}&room=${roomId}`
+            : `${serverUrl}?room=${roomId}`)
+        : serverUrl;
 
-    const roomDisplay = roomId === '' ? '主房间' : roomId;
+    const roomDisplay = roomId || '主房间（公共房间）';
 
     console.log(`🔄 正在连接服务器: ${wsUrl}`);
-    console.log(`🏠 房间: ${roomDisplay}`);
+    console.log(`🏠  房间: ${roomDisplay}`);
 
     try {
         ws = new WebSocket(wsUrl);
@@ -185,23 +282,35 @@ function gracefulShutdown() {
 async function main() {
     const rl = createInterface();
     const SERVER_URL = 'ws://156.245.200.31:5001';
+    const platform = detectPlatform();
+    const platformName = platform === 'macos' ? 'macOS' : platform.charAt(0).toUpperCase() + platform.slice(1);
 
     console.log('╔═══════════════════════════════════════╗');
-    console.log('║  Web Clipboard - Windows 客户端      ║');
+    console.log(`║  Web Clipboard - ${platformName} 客户端      ║`);
     console.log('╚═══════════════════════════════════════╝');
     console.log('');
     console.log(`💡 服务器地址: ${SERVER_URL}`);
     console.log('');
 
+    // 预检测剪贴板工具
+    try {
+        await detectClipboardCommand();
+    } catch (err) {
+        console.error(`❌ ${err.message}`);
+        process.exit(1);
+    }
+
     // 询问房间ID
     const roomId = await askRoomId(rl);
     rl.close();
 
-    const urlWithRoom = `http://${SERVER_URL.replace('ws://', '').replace('wss://', '')}?room=${roomId}`;
+    // 根据是否有房间ID构建URL
+    const baseUrl = `http://${SERVER_URL.replace('ws://', '').replace('wss://', '')}`;
+    const urlWithRoom = roomId ? `${baseUrl}?room=${roomId}` : baseUrl;
 
     console.log('');
     console.log('🚀 启动客户端...');
-    console.log(`🏠 你的房间ID: ${roomId}`);
+    console.log(`🏠  房间: ${roomId || '主房间（公共房间）'}`);
     console.log('');
     console.log('📱 手机访问:');
     console.log('─'.repeat(45));
@@ -227,18 +336,12 @@ async function main() {
     process.on('uncaughtException', (err) => {
         console.error('\n❌ 未捕获的异常:', err);
         console.error('错误堆栈:', err.stack);
-        console.log('\n按任意键退出...');
-        process.stdin.setRawMode(true);
-        process.stdin.resume();
-        process.stdin.on('data', () => process.exit(1));
+        process.exit(1);
     });
 
     process.on('unhandledRejection', (reason, promise) => {
         console.error('\n❌ 未处理的Promise拒绝:', reason);
-        console.log('\n按任意键退出...');
-        process.stdin.setRawMode(true);
-        process.stdin.resume();
-        process.stdin.on('data', () => process.exit(1));
+        process.exit(1);
     });
 }
 
@@ -246,8 +349,5 @@ async function main() {
 main().catch(err => {
     console.error('❌ 启动失败:', err);
     console.error('完整错误信息:', err);
-    console.log('\n按任意键退出...');
-    process.stdin.setRawMode(true);
-    process.stdin.resume();
-    process.stdin.on('data', () => process.exit(1));
+    process.exit(1);
 });

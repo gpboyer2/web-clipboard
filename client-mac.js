@@ -49,10 +49,12 @@ async function getClipboard() {
 
 // 连接 WebSocket
 function connect() {
-    // 构建带房间ID的WebSocket URL
-    const wsUrl = SERVER_URL.includes('?')
-        ? `${SERVER_URL}&room=${ROOM_ID}`
-        : `${SERVER_URL}?room=${ROOM_ID}`;
+    // 构建带房间ID的WebSocket URL（只有指定房间时才添加room参数）
+    const wsUrl = ROOM_ID
+        ? (SERVER_URL.includes('?')
+            ? `${SERVER_URL}&room=${ROOM_ID}`
+            : `${SERVER_URL}?room=${ROOM_ID}`)
+        : SERVER_URL;
 
     console.log(`🔄 正在连接服务器: ${wsUrl}`);
     console.log(`🏠 房间: ${ROOM_DISPLAY}`);
