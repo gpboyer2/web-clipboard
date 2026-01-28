@@ -3,6 +3,9 @@
   "version": "2.0.0",
   "description": "多设备实时同步剪贴板 - WebSocket 版本",
   "main": "server.js",
+  "bin": {
+    "web-clipboard-win": "client-windows-interactive.js"
+  },
   "scripts": {
     "start": "node server-local.js",
     "start:local": "node server-local.js",
@@ -11,7 +14,7 @@
     "client:windows": "node client-windows.js",
     "dev:local": "nodemon server-local.js",
     "dev:remote": "nodemon server-remote.js",
-    "pkg:build": "pkg . --config pkg.json",
+    "pkg:build": "pkg client-windows-interactive.js --targets node22-win-x64 --output dist/web-clipboard-win.exe",
     "pkg:clean": "rm -rf dist"
   },
   "keywords": [

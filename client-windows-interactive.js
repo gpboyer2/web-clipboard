@@ -89,29 +89,68 @@ async function main() {
 
     client.on('error', (err) => {
         console.error('❌ 启动失败:', err.message);
-        process.exit(1);
+        console.error('完整错误信息:', err);
+        console.log('\n按任意键退出...');
+        process.stdin.setRawMode(true);
+        process.stdin.resume();
+        process.stdin.on('data', () => process.exit(1));
     });
 
     client.on('exit', (code) => {
         if (code !== 0) {
-            console.log(`\n进程退出，代码: ${code}`);
+            console.log(`\n❌ 进程异常退出，代码: ${code}`);
+            console.log('按任意键退出...');
+            process.stdin.setRawMode(true);
+            process.stdin.resume();
+            process.stdin.on('data', () => process.exit(code));
+        } else {
+            process.exit(code);
         }
-        process.exit(code);
     });
 
     // 优雅退出
     process.on('SIGINT', () => {
         console.log('\n\n🛑 正在退出...');
-        client.kill('SIGINT');
+        try {
+            client.kill('SIGINT');
+        } catch (err) {
+            console.error('退出时出错:', err.message);
+        }
     });
 
     process.on('SIGTERM', () => {
-        client.kill('SIGTERM');
+        try {
+            client.kill('SIGTERM');
+        } catch (err) {
+            console.error('退出时出错:', err.message);
+        }
+    });
+
+    // 捕获未处理的异常
+    process.on('uncaughtException', (err) => {
+        console.error('\n❌ 未捕获的异常:', err);
+        console.error('错误堆栈:', err.stack);
+        console.log('\n按任意键退出...');
+        process.stdin.setRawMode(true);
+        process.stdin.resume();
+        process.stdin.on('data', () => process.exit(1));
+    });
+
+    process.on('unhandledRejection', (reason, promise) => {
+        console.error('\n❌ 未处理的Promise拒绝:', reason);
+        console.log('\n按任意键退出...');
+        process.stdin.setRawMode(true);
+        process.stdin.resume();
+        process.stdin.on('data', () => process.exit(1));
     });
 }
 
 // 启动
 main().catch(err => {
     console.error('❌ 启动失败:', err);
-    process.exit(1);
+    console.error('完整错误信息:', err);
+    console.log('\n按任意键退出...');
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stdin.on('data', () => process.exit(1));
 });

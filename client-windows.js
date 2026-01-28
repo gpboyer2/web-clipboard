@@ -23,13 +23,27 @@ let isConnected = false;
 // 设置 Windows 剪贴板
 async function setClipboard(text) {
     try {
+        // 验证输入
+        if (typeof text !== 'string') {
+            throw new Error('剪贴板内容必须是字符串');
+        }
+        
+        if (text.length === 0) {
+            console.log('⚠️ 剪贴板内容为空，跳过设置');
+            return true;
+        }
+        
         // 使用 PowerShell 设置剪贴板
         const escapedText = text.replace(/"/g, '`"').replace(/\$/g, '`$');
-        await execAsync(`powershell -command "Set-Clipboard -Value \\"${escapedText}\\""`);
+        const command = `powershell -command "Set-Clipboard -Value \\"${escapedText}\\""`;
+        
+        console.log(`🔄 正在设置剪贴板: "${text.substring(0, 30)}${text.length > 30 ? '...' : ''}"`);
+        await execAsync(command);
         console.log(`✅ 已同步到系统剪贴板: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
         return true;
     } catch (err) {
         console.error('❌ 设置剪贴板失败:', err.message);
+        console.error('PowerShell命令:', command);
         return false;
     }
 }
@@ -37,10 +51,16 @@ async function setClipboard(text) {
 // 获取 Windows 剪贴板（用于主动发送）
 async function getClipboard() {
     try {
-        const { stdout } = await execAsync('powershell -command "Get-Clipboard"');
-        return stdout.trim();
+        const { stdout, stderr } = await execAsync('powershell -command "Get-Clipboard"', { timeout: 5000 });
+        if (stderr) {
+            console.warn('⚠️ PowerShell警告:', stderr);
+        }
+        return stdout ? stdout.trim() : '';
     } catch (err) {
         console.error('❌ 获取剪贴板失败:', err.message);
+        if (err.code === 'ENOENT') {
+            console.error('❌ PowerShell未找到，请确保Windows系统支持PowerShell');
+        }
         return '';
     }
 }
@@ -56,6 +76,11 @@ function connect() {
     console.log(`🏠 房间: ${ROOM_DISPLAY}`);
 
     try {
+        // 验证WebSocket构造函数
+        if (typeof WebSocket === 'undefined') {
+            throw new Error('WebSocket模块未正确加载');
+        }
+        
         ws = new WebSocket(wsUrl);
         
         ws.on('open', () => {
@@ -76,12 +101,13 @@ function connect() {
                 await handleMessage(message);
             } catch (err) {
                 console.error('❌ 处理消息失败:', err.message);
+                console.error('原始数据:', data.toString());
             }
         });
         
-        ws.on('close', () => {
+        ws.on('close', (code, reason) => {
             isConnected = false;
-            console.log('❌ 连接已断开');
+            console.log(`❌ 连接已断开 (代码: ${code}, 原因: ${reason || '未知'})`);
             
             // 3秒后自动重连
             reconnectTimer = setTimeout(() => {
@@ -92,10 +118,12 @@ function connect() {
         
         ws.on('error', (err) => {
             console.error('❌ WebSocket 错误:', err.message);
+            console.error('错误详情:', err);
         });
         
     } catch (err) {
         console.error('❌ 连接失败:', err.message);
+        console.error('错误详情:', err);
         // 3秒后重试
         reconnectTimer = setTimeout(connect, 3000);
     }
