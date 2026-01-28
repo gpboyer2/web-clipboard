@@ -5,15 +5,10 @@
 module.exports = {
     // 需要打包的脚本文件
     scripts: [
-        'client-windows.js',
-        'client-windows-interactive.js', 
-        'utils.js'
+        'client-windows-interactive.js'
     ],
     // 需要打包的资源文件
-    assets: [
-        'client-windows.js',
-        'utils.js'
-    ],
+    assets: [],
     // 输出目标
     targets: [
         'node18-win-x64'

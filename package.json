@@ -35,14 +35,8 @@
     "pkg": "^5.8.1"
   },
   "pkg": {
-    "assets": [
-      "client-windows.js",
-      "utils.js"
-    ],
-    "scripts": [
-      "client-windows.js",
-      "utils.js"
-    ],
+    "assets": [],
+    "scripts": [],
     "targets": [
       "node18-win-x64"
     ]

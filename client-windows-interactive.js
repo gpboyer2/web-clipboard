@@ -1,13 +1,17 @@
 #!/usr/bin/env node
 /**
  * Windows 客户端交互式启动入口
- * 打包后的主程序，提供用户交互界面
+ * 打包后的主程序，提供用户交互界面，并直接运行客户端逻辑
  */
 
-const { spawn } = require('child_process');
 const path = require('path');
 const crypto = require('crypto');
 const readline = require('readline');
+const WebSocket = require('ws');
+const { exec } = require('child_process');
+const { promisify } = require('util');
+
+const execAsync = promisify(exec);
 
 /**
  * 生成唯一的房间ID（随机8位字符）
@@ -36,6 +40,143 @@ function askRoomId(rl) {
             resolve(roomId);
         });
     });
+}
+
+// ==================== WebSocket 客户端逻辑 ====================
+
+let ws = null;
+let reconnectTimer = null;
+let isConnected = false;
+let currentServerUrl = '';
+let currentRoomId = '';
+
+/**
+ * 设置 Windows 剪贴板
+ */
+async function setClipboard(text) {
+    try {
+        if (typeof text !== 'string') {
+            throw new Error('剪贴板内容必须是字符串');
+        }
+
+        if (text.length === 0) {
+            console.log('⚠️ 剪贴板内容为空，跳过设置');
+            return true;
+        }
+
+        const escapedText = text.replace(/"/g, '`"').replace(/\$/g, '`$');
+        const command = `powershell -command "Set-Clipboard -Value \\"${escapedText}\\""`;
+
+        await execAsync(command);
+        console.log(`✅ 已同步到系统剪贴板: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
+        return true;
+    } catch (err) {
+        console.error('❌ 设置剪贴板失败:', err.message);
+        return false;
+    }
+}
+
+/**
+ * 连接 WebSocket
+ */
+function connect(serverUrl, roomId) {
+    currentServerUrl = serverUrl;
+    currentRoomId = roomId;
+
+    const wsUrl = serverUrl.includes('?')
+        ? `${serverUrl}&room=${roomId}`
+        : `${serverUrl}?room=${roomId}`;
+
+    const roomDisplay = roomId === '' ? '主房间' : roomId;
+
+    console.log(`🔄 正在连接服务器: ${wsUrl}`);
+    console.log(`🏠 房间: ${roomDisplay}`);
+
+    try {
+        ws = new WebSocket(wsUrl);
+
+        ws.on('open', () => {
+            isConnected = true;
+            console.log('✅ 已连接到服务器');
+            console.log('📱 等待接收剪贴板消息...\n');
+
+            if (reconnectTimer) {
+                clearTimeout(reconnectTimer);
+                reconnectTimer = null;
+            }
+        });
+
+        ws.on('message', async (data) => {
+            try {
+                const message = JSON.parse(data.toString());
+                await handleMessage(message);
+            } catch (err) {
+                console.error('❌ 处理消息失败:', err.message);
+            }
+        });
+
+        ws.on('close', (code, reason) => {
+            isConnected = false;
+            console.log(`❌ 连接已断开 (代码: ${code}, 原因: ${reason || '未知'})`);
+
+            reconnectTimer = setTimeout(() => {
+                console.log('🔄 尝试重新连接...\n');
+                connect(currentServerUrl, currentRoomId);
+            }, 3000);
+        });
+
+        ws.on('error', (err) => {
+            console.error('❌ WebSocket 错误:', err.message);
+        });
+
+    } catch (err) {
+        console.error('❌ 连接失败:', err.message);
+        reconnectTimer = setTimeout(connect, 3000, currentServerUrl, currentRoomId);
+    }
+}
+
+/**
+ * 处理接收到的消息
+ */
+async function handleMessage(message) {
+    const timestamp = new Date().toLocaleString('zh-CN');
+
+    switch (message.type) {
+        case 'connected':
+            console.log(`📡 [${timestamp}] ${message.message}`);
+            break;
+
+        case 'online':
+            console.log(`👥 在线设备数: ${message.count}`);
+            break;
+
+        case 'clipboard':
+            console.log(`\n📨 [${timestamp}] 收到来自 ${message.from} 的剪贴板:`);
+            console.log(`   内容: ${message.text.substring(0, 100)}${message.text.length > 100 ? '...' : ''}`);
+            await setClipboard(message.text);
+            console.log('');
+            break;
+
+        default:
+            console.log('📩 收到消息:', message);
+    }
+}
+
+/**
+ * 优雅退出
+ */
+function gracefulShutdown() {
+    console.log('\n\n🛑 正在退出...');
+
+    if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+    }
+
+    if (ws) {
+        ws.close();
+    }
+
+    process.exit(0);
 }
 
 /**
@@ -75,77 +216,12 @@ async function main() {
     console.log('═'.repeat(45));
     console.log('');
 
-    // 启动客户端，传递环境变量
-    // 处理PKG打包后的路径问题
-    let clientScript;
-    if (process.pkg) {
-        // PKG打包后的环境，使用snapshot路径
-        clientScript = path.join(process.cwd(), 'client-windows.js');
-    } else {
-        // 开发环境
-        clientScript = path.join(__dirname, 'client-windows.js');
-    }
-    
-    console.log(`📁 客户端脚本路径: ${clientScript}`);
-    
-    // 验证文件是否存在
-    const fs = require('fs');
-    if (!fs.existsSync(clientScript)) {
-        console.error(`❌ 客户端脚本不存在: ${clientScript}`);
-        console.error('当前工作目录:', process.cwd());
-        console.error('__dirname:', __dirname);
-        console.error('process.pkg:', !!process.pkg);
-        process.exit(1);
-    }
-    
-    const client = spawn(process.execPath, [clientScript], {
-        stdio: 'inherit',
-        cwd: __dirname,
-        env: {
-            ...process.env,
-            ROOM_ID: roomId,
-            SERVER_URL: SERVER_URL
-        }
-    });
+    // 直接启动 WebSocket 客户端（不使用 spawn）
+    connect(SERVER_URL, roomId);
 
-    client.on('error', (err) => {
-        console.error('❌ 启动失败:', err.message);
-        console.error('完整错误信息:', err);
-        console.log('\n按任意键退出...');
-        process.stdin.setRawMode(true);
-        process.stdin.resume();
-        process.stdin.on('data', () => process.exit(1));
-    });
-
-    client.on('exit', (code) => {
-        if (code !== 0) {
-            console.log(`\n❌ 进程异常退出，代码: ${code}`);
-            console.log('按任意键退出...');
-            process.stdin.setRawMode(true);
-            process.stdin.resume();
-            process.stdin.on('data', () => process.exit(code));
-        } else {
-            process.exit(code);
-        }
-    });
-
-    // 优雅退出
-    process.on('SIGINT', () => {
-        console.log('\n\n🛑 正在退出...');
-        try {
-            client.kill('SIGINT');
-        } catch (err) {
-            console.error('退出时出错:', err.message);
-        }
-    });
-
-    process.on('SIGTERM', () => {
-        try {
-            client.kill('SIGTERM');
-        } catch (err) {
-            console.error('退出时出错:', err.message);
-        }
-    });
+    // 监听退出信号
+    process.on('SIGINT', gracefulShutdown);
+    process.on('SIGTERM', gracefulShutdown);
 
     // 捕获未处理的异常
     process.on('uncaughtException', (err) => {
