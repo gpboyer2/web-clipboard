@@ -4,7 +4,9 @@
   "description": "多设备实时同步剪贴板 - WebSocket 版本",
   "main": "server.js",
   "bin": {
-    "web-clipboard-win": "client-windows-interactive.js"
+    "web-clipboard-win": "client-windows-interactive.js",
+    "web-clipboard-mac": "client-mac-interactive.js",
+    "web-clipboard-linux": "client-linux-interactive.js"
   },
   "scripts": {
     "start": "node server-local.js",
@@ -14,7 +16,10 @@
     "client:windows": "node client-windows.js",
     "dev:local": "nodemon server-local.js",
     "dev:remote": "nodemon server-remote.js",
-    "pkg:build:win": "pkg client-windows-interactive.js --config pkg-config.js --output release-build/pkg/win/web-clipboard-win.exe",
+    "pkg:build:win": "pkg client-windows-interactive.js --config pkg-config.js --targets node18-win-x64 --output release-build/pkg/win/web-clipboard-win.exe",
+    "pkg:build:mac": "pkg client-mac-interactive.js --config pkg-config.js --targets node18-macos-x64 --output release-build/pkg/mac/web-clipboard-mac",
+    "pkg:build:linux": "pkg client-linux-interactive.js --config pkg-config.js --targets node18-linux-x64 --output release-build/pkg/linux/web-clipboard-linux",
+    "pkg:build:all": "npm run pkg:build:win && npm run pkg:build:mac && npm run pkg:build:linux",
     "pkg:clean": "rm -rf release-build/pkg"
   },
   "keywords": [
@@ -37,7 +42,9 @@
     "assets": [],
     "scripts": [],
     "targets": [
-      "node18-win-x64"
+      "node18-win-x64",
+      "node18-macos-x64",
+      "node18-linux-x64"
     ]
   }
 }

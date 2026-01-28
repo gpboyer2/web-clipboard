@@ -5,12 +5,16 @@
 module.exports = {
     // 需要打包的脚本文件
     scripts: [
-        'client-windows-interactive.js'
+        'client-windows-interactive.js',
+        'client-mac-interactive.js',
+        'client-linux-interactive.js'
     ],
     // 需要打包的资源文件
     assets: [],
     // 输出目标
     targets: [
-        'node18-win-x64'
+        'node18-win-x64',
+        'node18-macos-x64',
+        'node18-linux-x64'
     ]
 };
