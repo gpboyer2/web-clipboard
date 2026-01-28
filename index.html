@@ -289,6 +289,12 @@
 
     <script>
         const API_BASE = window.location.origin;
+
+        // 从URL参数获取房间ID，不指定则为主房间
+        const urlParams = new URLSearchParams(window.location.search);
+        const ROOM_ID = urlParams.get('room') || '';
+        const ROOM_DISPLAY = ROOM_ID === '' ? '主房间' : ROOM_ID;
+
         let ws = null;
         let reconnectTimer = null;
         let onlineCount = 0;
@@ -296,14 +302,14 @@
         // WebSocket 连接
         function connectWebSocket() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}`;
-            
+            const wsUrl = `${protocol}//${window.location.host}?room=${ROOM_ID}`;
+
             try {
                 ws = new WebSocket(wsUrl);
-                
+
                 ws.onopen = () => {
-                    console.log('✅ WebSocket 已连接');
-                    updateStatus('connected', '✅ 已连接到服务器');
+                    console.log(`✅ WebSocket 已连接 (房间: ${ROOM_DISPLAY})`);
+                    updateStatus('connected', `✅ 已连接到${ROOM_DISPLAY}`);
                     
                     // 清除重连定时器
                     if (reconnectTimer) {
@@ -346,12 +352,13 @@
         function handleWebSocketMessage(data) {
             switch (data.type) {
                 case 'connected':
+                    console.log(`📡 ${data.message} (房间: ${data.roomId})`);
                     showToast(data.message);
                     break;
-                    
+
                 case 'online':
                     onlineCount = data.count;
-                    updateStatus('connected', `✅ 已连接 (在线: ${onlineCount})`);
+                    updateStatus('connected', `✅ 已连接到${ROOM_DISPLAY} (在线: ${onlineCount})`);
                     break;
                     
                 case 'clipboard':
@@ -431,7 +438,7 @@
                     const res = await fetch(`${API_BASE}/send`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ text: textToSend })
+                        body: JSON.stringify({ text: textToSend, room: ROOM_ID })
                     });
                     const data = await res.json();
                     if (data.success) {
@@ -490,7 +497,7 @@
         // 加载历史记录
         async function loadHistory() {
             try {
-                const res = await fetch(`${API_BASE}/history`);
+                const res = await fetch(`${API_BASE}/history?room=${ROOM_ID}`);
                 const data = await res.json();
                 if (data.success && data.list.length > 0) {
                     renderHistory(data.list);
@@ -544,7 +551,7 @@
                 const res = await fetch(`${API_BASE}/send`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: content })
+                    body: JSON.stringify({ text: content, room: ROOM_ID })
                 });
                 const data = await res.json();
                 if (data.success) {
