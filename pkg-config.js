@@ -5,9 +5,7 @@
 module.exports = {
     // 需要打包的脚本文件
     scripts: [
-        'client-windows-interactive.js',
-        'client-mac-interactive.js',
-        'client-linux-interactive.js'
+        'interactive.js'
     ],
     // 需要打包的资源文件
     assets: [],

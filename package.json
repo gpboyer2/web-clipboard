@@ -15,9 +15,10 @@
     "dev:local": "nodemon server-local.js",
     "dev:remote": "nodemon server-remote.js",
     "pkg:build:win": "pkg interactive.js --config pkg-config.js --targets node18-win-x64 --output release-build/pkg/win/web-clipboard.exe",
-    "pkg:build:mac": "pkg interactive.js --config pkg-config.js --targets node18-macos-x64 --output release-build/pkg/mac/web-clipboard",
+    "pkg:build:mac_x64": "pkg interactive.js --config pkg-config.js --targets node18-macos-x64 --output release-build/pkg/mac/web-clipboard-x64",
+    "pkg:build:mac_arm64": "pkg interactive.js --config pkg-config.js --targets node18-macos-arm64 --output release-build/pkg/mac/web-clipboard-arm64",
     "pkg:build:linux": "pkg interactive.js --config pkg-config.js --targets node18-linux-x64 --output release-build/pkg/linux/web-clipboard",
-    "pkg:build:all": "npm run pkg:build:win && npm run pkg:build:mac && npm run pkg:build:linux",
+    "pkg:build:all": "npm run pkg:build:win && npm run pkg:build:mac_x64 && npm run pkg:build:mac_arm64 && npm run pkg:build:linux",
     "pkg:clean": "rm -rf release-build/pkg"
   },
   "keywords": [
