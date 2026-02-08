@@ -9,7 +9,7 @@ const http = require('http');
 const WebSocket = require('ws');
 const fs = require('fs').promises;
 const path = require('path');
-const { generateQRCode, getLocalIP } = require('./utils');
+const { isValidRoomId, generateQRCode, getLocalIP } = require('./utils');
 const crypto = require('crypto');
 
 const app = express();
@@ -104,7 +104,9 @@ const DEFAULT_ROOM_ID = '';
 wss.on('connection', (ws, req) => {
     // 从URL参数解析房间ID
     const url = new URL(req.url, `http://${req.headers.host}`);
-    const roomId = url.searchParams.get('room') || DEFAULT_ROOM_ID;
+    // 统一判断无效值：null、undefined、空字符串、NaN 都进入主房间
+    const rawRoomId = url.searchParams.get('room');
+    const roomId = isValidRoomId(rawRoomId) ? rawRoomId : DEFAULT_ROOM_ID;
 
     // 显示房间信息，主房间特殊标识
     const roomDisplay = roomId === '' ? '主房间' : (roomId || 'default');

@@ -9,6 +9,24 @@ const os = require('os');
 const execAsync = promisify(exec);
 
 /**
+ * 判断是否为有效的房间ID
+ * 无效值：null、undefined、空字符串、NaN、以及字符串格式的 "null"、"undefined"、"NaN"
+ * @param {*} value - 待判断的值
+ * @returns {boolean} - 是否为有效的房间ID
+ */
+function isValidRoomId(value) {
+    if (value === null || value === undefined) return false;
+    if (typeof value === 'number' && isNaN(value)) return false;
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed === '') return false;
+        if (trimmed === 'null' || trimmed === 'undefined' || trimmed === 'NaN') return false;
+        return true;
+    }
+    return true;
+}
+
+/**
  * 生成二维码（终端显示）
  * @param {string} url - 要生成二维码的 URL
  * @returns {Promise<string>} 二维码字符串或错误提示
@@ -47,6 +65,7 @@ function getLocalIP() {
 }
 
 module.exports = {
+    isValidRoomId,
     generateQRCode,
     getLocalIP
 };

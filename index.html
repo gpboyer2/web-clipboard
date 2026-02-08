@@ -287,12 +287,14 @@
 
     <div class="toast" id="toast"></div>
 
+    <script src="utils-browser.js"></script>
     <script>
         const API_BASE = window.location.origin;
 
         // 从URL参数获取房间ID，不指定则为主房间
         const urlParams = new URLSearchParams(window.location.search);
-        const ROOM_ID = urlParams.get('room') || '';
+        const rawRoomId = urlParams.get('room');
+        const ROOM_ID = isValidRoomId(rawRoomId) ? rawRoomId : '';
         const ROOM_DISPLAY = ROOM_ID === '' ? '主房间' : ROOM_ID;
 
         let ws = null;
@@ -302,7 +304,9 @@
         // WebSocket 连接
         function connectWebSocket() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}?room=${ROOM_ID}`;
+            const wsUrl = isValidRoomId(ROOM_ID)
+                ? `${protocol}//${window.location.host}?room=${encodeURIComponent(ROOM_ID)}`
+                : `${protocol}//${window.location.host}`;
 
             try {
                 ws = new WebSocket(wsUrl);
@@ -497,7 +501,10 @@
         // 加载历史记录
         async function loadHistory() {
             try {
-                const res = await fetch(`${API_BASE}/history?room=${ROOM_ID}`);
+                const url = isValidRoomId(ROOM_ID)
+                    ? `${API_BASE}/history?room=${encodeURIComponent(ROOM_ID)}`
+                    : `${API_BASE}/history`;
+                const res = await fetch(url);
                 const data = await res.json();
                 if (data.success && data.list.length > 0) {
                     renderHistory(data.list);

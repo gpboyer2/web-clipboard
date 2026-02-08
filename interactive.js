@@ -14,6 +14,7 @@ const readline = require('readline');
 const WebSocket = require('ws');
 const { exec } = require('child_process');
 const { promisify } = require('util');
+const { isValidRoomId } = require('./utils');
 
 const execAsync = promisify(exec);
 
@@ -173,10 +174,8 @@ async function setClipboard(text) {
  */
 function connect(serverUrl, roomId) {
     // 构建带房间ID的WebSocket URL（只有指定房间时才添加room参数）
-    const wsUrl = roomId
-        ? (serverUrl.includes('?')
-            ? `${serverUrl}&room=${roomId}`
-            : `${serverUrl}?room=${roomId}`)
+    const wsUrl = isValidRoomId(roomId)
+        ? `${serverUrl}${serverUrl.includes('?') ? '&' : '?'}room=${encodeURIComponent(roomId)}`
         : serverUrl;
 
     const roomDisplay = roomId || '主房间（公共房间）';
@@ -308,7 +307,9 @@ async function main() {
 
     // 根据是否有房间ID构建URL
     const baseUrl = `http://${SERVER_URL.replace('ws://', '').replace('wss://', '')}`;
-    const urlWithRoom = roomId ? `${baseUrl}?room=${roomId}` : baseUrl;
+    const urlWithRoom = isValidRoomId(roomId)
+        ? `${baseUrl}?room=${encodeURIComponent(roomId)}`
+        : baseUrl;
 
     console.log('');
     console.log('🚀 启动客户端...');
