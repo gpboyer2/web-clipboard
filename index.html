@@ -309,7 +309,7 @@
 
                 ws.onopen = () => {
                     console.log(`✅ WebSocket 已连接 (房间: ${ROOM_DISPLAY})`);
-                    updateStatus('connected', `✅ 已连接到${ROOM_DISPLAY}`);
+                    updateStatus('connected', `✅ 已连接到 房间 ${ROOM_DISPLAY}`);
                     
                     // 清除重连定时器
                     if (reconnectTimer) {
@@ -358,7 +358,7 @@
 
                 case 'online':
                     onlineCount = data.count;
-                    updateStatus('connected', `✅ 已连接到${ROOM_DISPLAY} (在线: ${onlineCount})`);
+                    updateStatus('connected', `✅ 已连接到 房间 ${ROOM_DISPLAY} (在线: ${onlineCount})`);
                     break;
                     
                 case 'clipboard':

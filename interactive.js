@@ -32,7 +32,7 @@ function createInterface() {
  */
 function validateRoomId(roomId) {
     if (!roomId) return true; // 空房间ID（主房间）有效
-    if (/^[A-Z0-9]{8}$/i.test(roomId)) return true;
+    if (/^[A-Z0-9]{1,}$/i.test(roomId)) return true; // 至少1位字母数字
     return false;
 }
 
@@ -46,7 +46,7 @@ function askRoomId(rl) {
 
             // 验证房间ID格式
             if (roomId && !validateRoomId(roomId)) {
-                console.log('⚠️  房间ID格式应为8位字母数字');
+                console.log('⚠️  房间ID只能包含字母和数字');
                 resolve('');
                 return;
             }
@@ -69,8 +69,6 @@ function askRoomId(rl) {
 let ws = null;
 let reconnectTimer = null;
 let isConnected = false;
-let currentServerUrl = '';
-let currentRoomId = '';
 
 /**
  * 检测平台类型
@@ -174,9 +172,6 @@ async function setClipboard(text) {
  * 连接 WebSocket
  */
 function connect(serverUrl, roomId) {
-    currentServerUrl = serverUrl;
-    currentRoomId = roomId;
-
     // 构建带房间ID的WebSocket URL（只有指定房间时才添加room参数）
     const wsUrl = roomId
         ? (serverUrl.includes('?')
@@ -191,6 +186,10 @@ function connect(serverUrl, roomId) {
 
     try {
         ws = new WebSocket(wsUrl);
+
+        // 将房间ID和服务器URL绑定到 ws 实例上，避免多实例时全局变量互相覆盖
+        ws.targetRoomId = roomId;
+        ws.targetServerUrl = serverUrl;
 
         ws.on('open', () => {
             isConnected = true;
@@ -216,9 +215,11 @@ function connect(serverUrl, roomId) {
             isConnected = false;
             console.log(`❌ 连接已断开 (代码: ${code}, 原因: ${reason || '未知'})`);
 
+            // 使用绑定到 ws 实例上的房间ID和服务器URL进行重连
             reconnectTimer = setTimeout(() => {
                 console.log('🔄 尝试重新连接...\n');
-                connect(currentServerUrl, currentRoomId);
+                console.log(`🔑 重连房间: ${ws.targetRoomId || '主房间'}`);
+                connect(ws.targetServerUrl, ws.targetRoomId);
             }, 3000);
         });
 
@@ -228,7 +229,8 @@ function connect(serverUrl, roomId) {
 
     } catch (err) {
         console.error('❌ 连接失败:', err.message);
-        reconnectTimer = setTimeout(connect, 3000, currentServerUrl, currentRoomId);
+        // 重连时使用原始参数
+        reconnectTimer = setTimeout(() => connect(serverUrl, roomId), 3000);
     }
 }
 
