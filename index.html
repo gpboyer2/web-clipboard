@@ -500,7 +500,7 @@
             textarea.value = '';
 
             // 【重要】在发送前就保存到 localStorage，确保任何错误都不会丢失数据
-            const sendTimestamp = Date.now();
+            const sendTimestamp = Math.floor(Date.now() / 1000) * 1000;
             console.log('[发送流程] 开始发送', {
                 时间: new Date(sendTimestamp).toISOString(),
                 时间戳: sendTimestamp,
@@ -687,26 +687,18 @@
                     console.log('[状态检查] 开始时间戳匹配', {
                         服务器记录数: data.list.length,
                         待匹配时间戳: sendTimestamp,
-                        容差: '5000ms'
+                        容差: '0ms（精确匹配）'
                     });
 
                     // 有历史记录时，才进行时间戳匹配
-                    let matchedItem = null;
-                    let minDiff = Infinity;
                     const found = data.list.some(item => {
                         const itemTimestamp = parseFilenameTimestamp(item.filename);
-                        const diff = Math.abs(itemTimestamp - sendTimestamp);
-                        if (diff < minDiff) {
-                            minDiff = diff;
-                            matchedItem = item.filename;
-                        }
-                        return diff <= 5000; // 5 秒误差
+                        return itemTimestamp === sendTimestamp;
                     });
 
                     console.log('[状态检查] 匹配结果', {
                         找到匹配: found,
-                        最小时间差: `${minDiff}ms`,
-                        匹配文件: found ? matchedItem : null,
+                        匹配文件: found ? data.list.find(item => parseFilenameTimestamp(item.filename) === sendTimestamp)?.filename : null,
                         判断: found ? '发送成功' : '发送失败'
                     });
 
@@ -897,14 +889,12 @@
             serverList.forEach(item => {
                 const itemTimestamp = parseFilenameTimestamp(item.filename);
 
-                // 检查是否有对应的本地消息（30 秒容差）
+                // 检查是否有对应的本地消息（精确匹配）
                 let matchedLocalMsg = null;
-                let minDiff = Infinity;
                 for (const [localTimestamp, localMsg] of localMap) {
-                    const diff = Math.abs(localTimestamp - itemTimestamp);
-                    if (diff <= 30000 && diff < minDiff) {
-                        minDiff = diff;
+                    if (localTimestamp === itemTimestamp) {
                         matchedLocalMsg = localMsg;
+                        break;
                     }
                 }
 
@@ -912,7 +902,6 @@
                     console.log('[消息合并] 匹配成功', {
                         本地时间戳: matchedLocalMsg.timestamp,
                         服务器时间戳: itemTimestamp,
-                        时间差: `${minDiff}ms`,
                         文件: item.filename,
                         本地状态: matchedLocalMsg.status
                     });
@@ -1053,7 +1042,7 @@
             const statusMap = {
                 'failed': '<span class="history-status failed">未发送成功，点击重新发送</span>',
                 'pending': '<span class="history-status pending">发送中...</span>',
-                'success': '<span class="history-status success">已发送</span>'
+                'success': ''
             };
 
             return statusMap[status] || '';
@@ -1065,7 +1054,7 @@
             showToast('重新发送中...', 'info');
 
             // 直接重新发送，不需要填入输入框
-            const sendTimestamp = Date.now();
+            const sendTimestamp = Math.floor(Date.now() / 1000) * 1000;
             const utcTimestamp = saveLocalMessage(sendTimestamp, item.text, 'pending');
 
             // 更新旧消息状态为 pending（从列表中移除，避免重复）
