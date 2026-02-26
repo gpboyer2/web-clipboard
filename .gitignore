@@ -15,3 +15,6 @@ release-build/
 
 # macOS
 .DS_Store
+
+# 服务器配置文档
+.server.md
