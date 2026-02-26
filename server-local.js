@@ -25,11 +25,7 @@ const HISTORY_DIR = 'history';
 
 // 确保历史记录目录存在
 async function ensureHistoryDir() {
-    try {
-        await fs.access(HISTORY_DIR);
-    } catch {
-        await fs.mkdir(HISTORY_DIR);
-    }
+    await fs.mkdir(HISTORY_DIR, { recursive: true });
 }
 
 // Mac 剪贴板操作
@@ -55,6 +51,7 @@ async function getClipboard() {
 
 // 保存历史记录
 async function saveHistory(text) {
+    await ensureHistoryDir();
     const timestamp = new Date().toISOString().replace(/[-:T]/g, '').split('.')[0];
     const filename = `${timestamp}.txt`;
     const filepath = path.join(HISTORY_DIR, filename);
@@ -65,9 +62,10 @@ async function saveHistory(text) {
 // 获取历史记录列表
 async function getHistory(limit = 10) {
     try {
+        await fs.access(HISTORY_DIR);
         const files = await fs.readdir(HISTORY_DIR);
         const txtFiles = files.filter(f => f.endsWith('.txt'));
-        
+
         const fileList = await Promise.all(
             txtFiles.map(async filename => {
                 const filepath = path.join(HISTORY_DIR, filename);
@@ -75,7 +73,7 @@ async function getHistory(limit = 10) {
                 const content = await fs.readFile(filepath, 'utf-8');
                 const lines = content.split('\n');
                 const preview = lines.slice(0, 2).join('\n').trim();
-                
+
                 return {
                     filename,
                     preview,
@@ -84,10 +82,13 @@ async function getHistory(limit = 10) {
                 };
             })
         );
-        
+
         fileList.sort((a, b) => b.mtime - a.mtime);
         return fileList.slice(0, limit);
     } catch (err) {
+        if (err.code === 'ENOENT') {
+            return [];
+        }
         console.error('获取历史记录失败:', err);
         return [];
     }
