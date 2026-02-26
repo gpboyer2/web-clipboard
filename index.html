@@ -338,6 +338,7 @@
         // 连接状态弹窗控制
         let isFirstConnect = true;
         let hasShownConnectError = false;
+        let reconnect_attempts = 0;
 
         // WebSocket 连接
         function connectWebSocket() {
@@ -363,14 +364,15 @@
                     });
                     updateStatus('connected', `✅ 已连接到 房间 ${ROOM_DISPLAY}`);
 
+                    // 连接成功后重置重连次数和错误标记
+                    reconnect_attempts = 0;
+                    hasShownConnectError = false;
+
                     // 只有首次连接才弹窗
                     if (isFirstConnect) {
                         showToast('已连接到服务器', 'success');
                         isFirstConnect = false;
                     }
-
-                    // 连接成功后重置错误标志
-                    hasShownConnectError = false;
 
                     // 清除重连定时器
                     if (reconnectTimer) {
@@ -389,25 +391,33 @@
                 };
                 
                 ws.onclose = () => {
+                    reconnect_attempts++;
+
+                    // 智能重连策略：0ms → 1s → 3s → 10s
+                    // 根据重连次数递增等待时间
+                    const reconnectDelay = calculateReconnectDelay(reconnect_attempts);
+
                     console.log('[WebSocket] ❌ 断开连接', {
                         时间: new Date().toISOString(),
-                        将在: '3000ms 后重连'
+                        重连次数: reconnect_attempts,
+                        将在: `${reconnectDelay}ms 后重连`
                     });
                     updateStatus('error', '❌ 连接已断开');
 
-                    // 只在首次断开时弹窗
+                    // 只在首次断开时弹窗提示
                     if (!hasShownConnectError) {
-                        showToast('连接已断开，3秒后自动重连', 'error');
+                        showToast('连接已断开，正在后台重连...', 'error');
                         hasShownConnectError = true;
                     }
 
-                    // 3秒后自动重连
+                    // 智能延迟后重连
                     reconnectTimer = setTimeout(() => {
                         console.log('[WebSocket] 开始重连', {
+                            重连次数: reconnect_attempts,
                             时间: new Date().toISOString()
                         });
                         connectWebSocket();
-                    }, 3000);
+                    }, reconnectDelay);
                 };
                 
                 ws.onerror = (error) => {
@@ -417,9 +427,9 @@
                     });
                     updateStatus('error', '❌ 连接错误');
 
-                    // 只在首次错误时弹窗
+                    // 只在首次错误时弹窗提示
                     if (!hasShownConnectError) {
-                        showToast('连接错误，请检查网络', 'error');
+                        showToast('连接错误，正在后台重连...', 'error');
                         hasShownConnectError = true;
                     }
                 };

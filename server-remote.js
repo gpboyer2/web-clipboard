@@ -93,7 +93,7 @@ async function getHistory(roomId = DEFAULT_ROOM_ID, limit = 10) {
 const roomClients = new Map(); // Map<roomId, Set<ws>>
 
 // 心跳检测配置
-const HEARTBEAT_INTERVAL = 30000; // 30秒
+const HEARTBEAT_INTERVAL = 45000; // 45秒（降低服务器压力，给客户端更多响应时间）
 
 // 为每个连接添加心跳状态（按房间ID分组）
 const roomHeartbeats = new Map(); // Map<roomId, Map<ws, heartbeat>>
@@ -463,7 +463,7 @@ async function start() {
         console.log(`WebSocket: ws://${localIP}:${PORT}`);
         console.log('='.repeat(50) + '\n');
         console.log('💡 多用户隔离模式已启用');
-        console.log('💓 心跳检测已启动 (每 30秒检查一次)');
+        console.log('💓 心跳检测已启动 (每 45秒检查一次)');
         console.log('📱 每个用户使用独立的房间ID进行隔离');
         console.log('🏠 主房间（不指定room参数）为总房间\n');
 

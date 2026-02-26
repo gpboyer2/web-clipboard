@@ -9,6 +9,27 @@ const os = require('os');
 const execAsync = promisify(exec);
 
 /**
+ * WebSocket 智能重连延迟配置
+ * 第1次、第2次、第3次、第4次及以后的延迟时间(ms)
+ */
+const RECONNECT_DELAYS = [0, 1000, 3000, 10000];
+
+/**
+ * 最大重连次数
+ */
+const MAX_RECONNECT_ATTEMPTS = 50;
+
+/**
+ * 计算智能重连延迟时间
+ * @param {number} reconnect_attempts - 当前重连次数
+ * @returns {number} 延迟时间(ms)
+ */
+function calculateReconnectDelay(reconnect_attempts) {
+    const index = Math.min(reconnect_attempts, RECONNECT_DELAYS.length) - 1;
+    return RECONNECT_DELAYS[index] || RECONNECT_DELAYS[RECONNECT_DELAYS.length - 1];
+}
+
+/**
  * 判断是否为有效的房间ID
  * 无效值：null、undefined、空字符串、NaN、以及字符串格式的 "null"、"undefined"、"NaN"
  * @param {*} value - 待判断的值
@@ -65,6 +86,9 @@ function getLocalIP() {
 }
 
 module.exports = {
+    calculateReconnectDelay,
+    RECONNECT_DELAYS,
+    MAX_RECONNECT_ATTEMPTS,
     isValidRoomId,
     generateQRCode,
     getLocalIP

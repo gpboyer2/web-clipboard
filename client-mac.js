@@ -7,6 +7,7 @@
 const WebSocket = require('ws');
 const { exec } = require('child_process');
 const { promisify } = require('util');
+const { calculateReconnectDelay, MAX_RECONNECT_ATTEMPTS } = require('./utils');
 
 const execAsync = promisify(exec);
 
@@ -21,6 +22,7 @@ let reconnectTimer = null;
 let heartbeatTimer = null; // 心跳检测定时器
 let isConnected = false;
 let lastHeartbeat = Date.now(); // 记录最后收到服务器消息的时间
+let reconnect_attempts = 0;  // 跟踪重连次数
 const HEARTBEAT_CHECK_INTERVAL = 60000; // 60秒检查一次心跳
 const HEARTBEAT_TIMEOUT = 90000; // 90秒无响应则重连
 
@@ -65,6 +67,7 @@ function connect() {
         ws.on('open', () => {
             isConnected = true;
             lastHeartbeat = Date.now();
+            reconnect_attempts = 0;  // 连接成功后重置
             console.log('✅ 已连接到服务器');
             console.log('📱 等待接收剪贴板消息...\n');
 
@@ -93,15 +96,27 @@ function connect() {
         
         ws.on('close', () => {
             isConnected = false;
-            console.log('❌ 连接已断开');
-            
+            reconnect_attempts++;
+
+            // 智能重连策略：0ms → 1s → 3s → 10s
+            const reconnectDelay = calculateReconnectDelay(reconnect_attempts);
+
+            // 检查重连次数上限
+            if (reconnect_attempts > MAX_RECONNECT_ATTEMPTS) {
+                console.log(`\n⚠️  已达到最大重连次数 (${MAX_RECONNECT_ATTEMPTS}次)，停止重连`);
+                console.log('💡 请检查网络连接或服务器状态后重启程序\n');
+                process.exit(1);
+            }
+
+            console.log(`❌ 连接已断开，${reconnectDelay}ms 后重连 (重连次数: ${reconnect_attempts}/${MAX_RECONNECT_ATTEMPTS})`);
+
             // 只有在没有手动触发重连时才自动重连
             if (!reconnectTimer) {
                 reconnectTimer = setTimeout(() => {
                     console.log('🔄 尝试重新连接...\n');
                     reconnectTimer = null;
                     connect();
-                }, 3000);
+                }, reconnectDelay);
             }
         });
         
@@ -111,8 +126,21 @@ function connect() {
         
     } catch (err) {
         console.error('❌ 连接失败:', err.message);
-        // 3秒后重试
-        reconnectTimer = setTimeout(connect, 3000);
+        // 连接失败也算作一次断开，增加重连计数
+        reconnect_attempts++;
+
+        // 智能重连策略：0ms → 1s → 3s → 10s
+        const reconnectDelay = calculateReconnectDelay(reconnect_attempts);
+
+        // 检查重连次数上限
+        if (reconnect_attempts > MAX_RECONNECT_ATTEMPTS) {
+            console.log(`\n⚠️  已达到最大重连次数 (${MAX_RECONNECT_ATTEMPTS}次)，停止重连`);
+            console.log('💡 请检查网络连接或服务器状态后重启程序\n');
+            process.exit(1);
+        }
+
+        console.log(`${reconnectDelay}ms 后重试 (重连次数: ${reconnect_attempts}/${MAX_RECONNECT_ATTEMPTS})`);
+        reconnectTimer = setTimeout(connect, reconnectDelay);
     }
 }
 

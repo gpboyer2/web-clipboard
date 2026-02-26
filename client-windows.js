@@ -7,6 +7,7 @@
 const WebSocket = require('ws');
 const { exec } = require('child_process');
 const { promisify } = require('util');
+const { calculateReconnectDelay, MAX_RECONNECT_ATTEMPTS } = require('./utils');
 
 const execAsync = promisify(exec);
 
@@ -18,7 +19,12 @@ const DEVICE_NAME = 'Windows';
 
 let ws = null;
 let reconnectTimer = null;
+let heartbeatTimer = null;
 let isConnected = false;
+let reconnect_attempts = 0;
+let lastHeartbeat = Date.now();
+const HEARTBEAT_CHECK_INTERVAL = 60000;
+const HEARTBEAT_TIMEOUT = 90000;
 
 // 设置 Windows 剪贴板
 async function setClipboard(text) {
@@ -87,18 +93,27 @@ function connect() {
         
         ws.on('open', () => {
             isConnected = true;
+            lastHeartbeat = Date.now();
+            reconnect_attempts = 0;
             console.log('✅ 已连接到服务器');
             console.log('📱 等待接收剪贴板消息...\n');
-            
+
             // 清除重连定时器
             if (reconnectTimer) {
                 clearTimeout(reconnectTimer);
                 reconnectTimer = null;
             }
         });
+
+        // 处理 ping - 自动响应 pong
+        ws.on('ping', () => {
+            lastHeartbeat = Date.now();
+            console.log('💓 收到服务器心跳 ping，已自动响应 pong');
+        });
         
         ws.on('message', async (data) => {
             try {
+                lastHeartbeat = Date.now();
                 const message = JSON.parse(data.toString());
                 await handleMessage(message);
             } catch (err) {
@@ -109,13 +124,26 @@ function connect() {
         
         ws.on('close', (code, reason) => {
             isConnected = false;
+            reconnect_attempts++;
+
+            // 智能重连策略：0ms → 1s → 3s → 10s
+            const reconnectDelay = calculateReconnectDelay(reconnect_attempts);
+
+            // 检查重连次数上限
+            if (reconnect_attempts > MAX_RECONNECT_ATTEMPTS) {
+                console.log(`\n⚠️  已达到最大重连次数 (${MAX_RECONNECT_ATTEMPTS}次)，停止重连`);
+                console.log('💡 请检查网络连接或服务器状态后重启程序\n');
+                process.exit(1);
+            }
+
             console.log(`❌ 连接已断开 (代码: ${code}, 原因: ${reason || '未知'})`);
-            
-            // 3秒后自动重连
+            console.log(`${reconnectDelay}ms 后重连 (重连次数: ${reconnect_attempts}/${MAX_RECONNECT_ATTEMPTS})`);
+
+            // 智能延迟后自动重连
             reconnectTimer = setTimeout(() => {
                 console.log('🔄 尝试重新连接...\n');
                 connect();
-            }, 3000);
+            }, reconnectDelay);
         });
         
         ws.on('error', (err) => {
@@ -126,8 +154,21 @@ function connect() {
     } catch (err) {
         console.error('❌ 连接失败:', err.message);
         console.error('错误详情:', err);
-        // 3秒后重试
-        reconnectTimer = setTimeout(connect, 3000);
+        // 连接失败也算作一次断开，增加重连计数
+        reconnect_attempts++;
+
+        // 智能重连策略：0ms → 1s → 3s → 10s
+        const reconnectDelay = calculateReconnectDelay(reconnect_attempts);
+
+        // 检查重连次数上限
+        if (reconnect_attempts > MAX_RECONNECT_ATTEMPTS) {
+            console.log(`\n⚠️  已达到最大重连次数 (${MAX_RECONNECT_ATTEMPTS}次)，停止重连`);
+            console.log('💡 请检查网络连接或服务器状态后重启程序\n');
+            process.exit(1);
+        }
+
+        console.log(`${reconnectDelay}ms 后重试 (重连次数: ${reconnect_attempts}/${MAX_RECONNECT_ATTEMPTS})`);
+        reconnectTimer = setTimeout(connect, reconnectDelay);
     }
 }
 
@@ -185,15 +226,22 @@ async function sendClipboard() {
 // 优雅退出
 function gracefulShutdown() {
     console.log('\n\n🛑 正在退出...');
-    
+
+    // 清理所有定时器
     if (reconnectTimer) {
         clearTimeout(reconnectTimer);
+        reconnectTimer = null;
     }
-    
+
+    if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+    }
+
     if (ws) {
         ws.close();
     }
-    
+
     process.exit(0);
 }
 
@@ -218,13 +266,42 @@ console.log('═'.repeat(41) + '\n');
 // 启动连接
 connect();
 
+// 心跳检测 - 定期检查是否收到服务器消息
+heartbeatTimer = setInterval(() => {
+    const timeSinceLastHeartbeat = Date.now() - lastHeartbeat;
+
+    if (isConnected && timeSinceLastHeartbeat > HEARTBEAT_TIMEOUT) {
+        console.log(`\n⚠️  心跳超时 (${Math.floor(timeSinceLastHeartbeat / 1000)}秒未收到服务器消息)`);
+        console.log('🔄 主动断开并重连...\n');
+
+        // 清除可能存在的重连定时器，避免竞态条件
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+        }
+
+        // 强制断开并重连
+        isConnected = false;
+        if (ws) {
+            ws.terminate();
+            ws = null;
+        }
+        connect();
+    } else if (isConnected) {
+        // 只在心跳异常时才输出日志，减少噪音
+        if (timeSinceLastHeartbeat > 45000) {
+            console.log(`⚠️  心跳延迟 (距上次: ${Math.floor(timeSinceLastHeartbeat / 1000)}秒)`);
+        }
+    }
+}, HEARTBEAT_CHECK_INTERVAL);
+
 // 可选：监听本地剪贴板变化并主动发送（高级功能）
 // 取消注释下面的代码启用此功能
 /*
 let lastClipboard = '';
 setInterval(async () => {
     if (!isConnected) return;
-    
+
     const current = await getClipboard();
     if (current && current !== lastClipboard) {
         lastClipboard = current;
