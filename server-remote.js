@@ -419,6 +419,34 @@ app.post('/send', async (req, res) => {
     });
 });
 
+app.get('/api/version', async (req, res) => {
+    try {
+        const versionData = await fs.readFile('.version.json', 'utf-8');
+        const parsed = JSON.parse(versionData);
+        const version = parsed?.version;
+
+        if (!version) {
+            return res.json({
+                status: 'error',
+                message: '版本号格式错误',
+                datum: null
+            });
+        }
+
+        res.json({
+            status: 'success',
+            message: '获取版本号成功',
+            datum: { version }
+        });
+    } catch (err) {
+        res.json({
+            status: 'error',
+            message: err.code === 'ENOENT' ? '版本文件不存在' : '读取版本文件失败',
+            datum: null
+        });
+    }
+});
+
 // 启动服务器
 async function start() {
     await ensureHistoryDir();
