@@ -18,3 +18,4 @@ release-build/
 
 # 服务器配置文档
 .server.md
+config.md
