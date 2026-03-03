@@ -1,0 +1,20 @@
+# 历史记录目录
+history/
+
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Node.js
+node_modules/
+
+# 构建输出
+dist/
+release-build/
+
+# macOS
+.DS_Store
+
+# 服务器配置文档
+.server.md

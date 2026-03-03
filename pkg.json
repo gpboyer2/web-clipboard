@@ -1,0 +1,16 @@
+{
+  "name": "web-clipboard-win",
+  "version": "2.0.0",
+  "main": "client-windows-interactive.js",
+  "pkg": {
+    "scripts": [
+      "client-windows-interactive.js",
+      "client-windows.js"
+    ],
+    "assets": [],
+    "targets": [
+      "node22-win-x64"
+    ],
+    "outputPath": "release-build/pkg/win"
+  }
+}
