@@ -1,0 +1,88 @@
+name: Build Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+            build_cmd: pkg:build:win
+            artifact_name: web-clipboard.exe
+            artifact_path: release-build/pkg/win/web-clipboard.exe
+          - os: macos-latest
+            platform: mac_x64
+            build_cmd: pkg:build:mac_x64
+            artifact_name: web-clipboard-x64
+            artifact_path: release-build/pkg/mac/web-clipboard-x64
+          - os: macos-latest
+            platform: mac_arm64
+            build_cmd: pkg:build:mac_arm64
+            artifact_name: web-clipboard-arm64
+            artifact_path: release-build/pkg/mac/web-clipboard-arm64
+          - os: ubuntu-latest
+            platform: linux
+            build_cmd: pkg:build:linux
+            artifact_name: web-clipboard
+            artifact_path: release-build/pkg/linux/web-clipboard
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build ${{ matrix.platform }}
+        run: npm run ${{ matrix.build_cmd }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-clipboard-${{ matrix.platform }}
+          path: ${{ matrix.artifact_path }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Display structure of downloaded files
+        run: ls -R artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          generate_release_notes: true
+          files: |
+            artifacts/web-clipboard-win/*/*
+            artifacts/web-clipboard-mac_x64/*/*
+            artifacts/web-clipboard-mac_arm64/*/*
+            artifacts/web-clipboard-linux/*/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
