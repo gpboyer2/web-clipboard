@@ -15,6 +15,7 @@ const WebSocket = require('ws');
 const { exec } = require('child_process');
 const { promisify } = require('util');
 const { isValidRoomId, calculateReconnectDelay, MAX_RECONNECT_ATTEMPTS } = require('./utils');
+const clipboardy = require('clipboardy');
 
 const execAsync = promisify(exec);
 
@@ -130,21 +131,31 @@ async function detectClipboardCommand() {
 }
 
 /**
- * 设置剪贴板（跨平台）
+ * 设置剪贴板（双重保险：clipboardy -> 系统命令）
  */
 let clipboardCommand = null;
 
 async function setClipboard(text) {
+    if (typeof text !== 'string') {
+        throw new Error('剪贴板内容必须是字符串');
+    }
+
+    if (text.length === 0) {
+        console.log('⚠️  剪贴板内容为空，跳过设置');
+        return true;
+    }
+
+    // 方式1: 尝试 clipboardy
     try {
-        if (typeof text !== 'string') {
-            throw new Error('剪贴板内容必须是字符串');
-        }
+        await clipboardy.write(text);
+        console.log(`✅ 已同步到系统剪贴板 (clipboardy): ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
+        return true;
+    } catch (err) {
+        console.log('⚠️ clipboardy 失败，尝试系统命令...');
+    }
 
-        if (text.length === 0) {
-            console.log('⚠️  剪贴板内容为空，跳过设置');
-            return true;
-        }
-
+    // 方式2: 回退到系统命令
+    try {
         // 首次使用时检测剪贴板命令
         if (!clipboardCommand) {
             clipboardCommand = await detectClipboardCommand();
@@ -166,7 +177,7 @@ async function setClipboard(text) {
         }
 
         await execAsync(command);
-        console.log(`✅ 已同步到系统剪贴板: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
+        console.log(`✅ 已同步到系统剪贴板 (${type}): ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
         return true;
     } catch (err) {
         console.error('❌ 设置剪贴板失败:', err.message);
@@ -238,14 +249,18 @@ function connect(serverUrl, roomId) {
                 process.exit(1);
             }
 
+            // 保存房间ID到局部变量，避免 ws.terminate() 后无法访问
+            const savedRoomId = ws.targetRoomId;
+            const savedServerUrl = ws.targetServerUrl;
+
             console.log(`❌ 连接已断开 (代码: ${code}, 原因: ${reason || '未知'})`);
             console.log(`${reconnectDelay}ms 后重连 (重连次数: ${reconnect_attempts}/${MAX_RECONNECT_ATTEMPTS})`);
 
-            // 使用绑定到 ws 实例上的房间ID和服务器URL进行重连
+            // 使用保存的房间ID和服务器URL进行重连
             reconnectTimer = setTimeout(() => {
                 console.log('🔄 尝试重新连接...\n');
-                console.log(`🔑 重连房间: ${ws.targetRoomId || '主房间'}`);
-                connect(ws.targetServerUrl, ws.targetRoomId);
+                console.log(`🔑 重连房间: ${savedRoomId || '主房间'}`);
+                connect(savedServerUrl, savedRoomId);
             }, reconnectDelay);
         });
 
@@ -412,16 +427,16 @@ async function main() {
         }
     }, HEARTBEAT_CHECK_INTERVAL);
 
-    // 捕获未处理的异常
+    // 捕获未处理的异常 - 不退出进程，继续运行
     process.on('uncaughtException', (err) => {
-        console.error('\n❌ 未捕获的异常:', err);
-        console.error('错误堆栈:', err.stack);
-        process.exit(1);
+        console.error('\n❌ 未捕获的异常:', err.message);
+        console.error('   堆栈:', err.stack);
+        // 不退出进程，继续运行
     });
 
     process.on('unhandledRejection', (reason, promise) => {
         console.error('\n❌ 未处理的Promise拒绝:', reason);
-        process.exit(1);
+        // 不退出进程，继续运行
     });
 }
 

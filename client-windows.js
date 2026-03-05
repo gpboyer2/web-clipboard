@@ -8,6 +8,7 @@ const WebSocket = require('ws');
 const { exec } = require('child_process');
 const { promisify } = require('util');
 const { calculateReconnectDelay, MAX_RECONNECT_ATTEMPTS } = require('./utils');
+const clipboardy = require('clipboardy');
 
 const execAsync = promisify(exec);
 
@@ -26,30 +27,36 @@ let lastHeartbeat = Date.now();
 const HEARTBEAT_CHECK_INTERVAL = 60000;
 const HEARTBEAT_TIMEOUT = 90000;
 
-// 设置 Windows 剪贴板
+// 设置 Windows 剪贴板（双重保险：clipboardy -> PowerShell）
 async function setClipboard(text) {
+    // 验证输入
+    if (typeof text !== 'string') {
+        throw new Error('剪贴板内容必须是字符串');
+    }
+
+    if (text.length === 0) {
+        console.log('⚠️ 剪贴板内容为空，跳过设置');
+        return true;
+    }
+
+    // 方式1: 尝试 clipboardy
     try {
-        // 验证输入
-        if (typeof text !== 'string') {
-            throw new Error('剪贴板内容必须是字符串');
-        }
-        
-        if (text.length === 0) {
-            console.log('⚠️ 剪贴板内容为空，跳过设置');
-            return true;
-        }
-        
-        // 使用 PowerShell 设置剪贴板
+        await clipboardy.write(text);
+        console.log(`✅ 已同步到系统剪贴板 (clipboardy): ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
+        return true;
+    } catch (err) {
+        console.log('⚠️ clipboardy 失败，尝试 PowerShell...');
+    }
+
+    // 方式2: 回退到 PowerShell
+    try {
         const escapedText = text.replace(/"/g, '`"').replace(/\$/g, '`$');
         const command = `powershell -command "Set-Clipboard -Value \\"${escapedText}\\""`;
-        
-        console.log(`🔄 正在设置剪贴板: "${text.substring(0, 30)}${text.length > 30 ? '...' : ''}"`);
         await execAsync(command);
-        console.log(`✅ 已同步到系统剪贴板: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
+        console.log(`✅ 已同步到系统剪贴板 (PowerShell): ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
         return true;
     } catch (err) {
         console.error('❌ 设置剪贴板失败:', err.message);
-        console.error('PowerShell命令:', command);
         return false;
     }
 }
@@ -139,11 +146,14 @@ function connect() {
             console.log(`❌ 连接已断开 (代码: ${code}, 原因: ${reason || '未知'})`);
             console.log(`${reconnectDelay}ms 后重连 (重连次数: ${reconnect_attempts}/${MAX_RECONNECT_ATTEMPTS})`);
 
-            // 智能延迟后自动重连
-            reconnectTimer = setTimeout(() => {
-                console.log('🔄 尝试重新连接...\n');
-                connect();
-            }, reconnectDelay);
+            // 只有在没有手动触发重连时才自动重连
+            if (!reconnectTimer) {
+                reconnectTimer = setTimeout(() => {
+                    console.log('🔄 尝试重新连接...\n');
+                    reconnectTimer = null;
+                    connect();
+                }, reconnectDelay);
+            }
         });
         
         ws.on('error', (err) => {

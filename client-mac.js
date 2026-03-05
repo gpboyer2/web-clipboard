@@ -5,9 +5,10 @@
  */
 
 const WebSocket = require('ws');
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 const { promisify } = require('util');
 const { calculateReconnectDelay, MAX_RECONNECT_ATTEMPTS } = require('./utils');
+const clipboardy = require('clipboardy');
 
 const execAsync = promisify(exec);
 
@@ -26,11 +27,32 @@ let reconnect_attempts = 0;  // 跟踪重连次数
 const HEARTBEAT_CHECK_INTERVAL = 60000; // 60秒检查一次心跳
 const HEARTBEAT_TIMEOUT = 90000; // 90秒无响应则重连
 
-// 设置 Mac 剪贴板
+// 设置 Mac 剪贴板（双重保险：clipboardy -> pbcopy）
 async function setClipboard(text) {
+    // 验证输入
+    if (typeof text !== 'string') {
+        throw new Error('剪贴板内容必须是字符串');
+    }
+
+    if (text.length === 0) {
+        console.log('⚠️ 剪贴板内容为空，跳过设置');
+        return true;
+    }
+
+    // 方式1: 尝试 clipboardy
     try {
-        await execAsync(`echo ${JSON.stringify(text)} | pbcopy`);
-        console.log(`✅ 已同步到系统剪贴板: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
+        await clipboardy.write(text);
+        console.log(`✅ 已同步到系统剪贴板 (clipboardy): ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
+        return true;
+    } catch (err) {
+        console.log('⚠️ clipboardy 失败，尝试 pbcopy...');
+    }
+
+    // 方式2: 回退到 pbcopy
+    try {
+        const escapedText = text.replace(/"/g, '\\"');
+        await execAsync(`echo "${escapedText}" | pbcopy`);
+        console.log(`✅ 已同步到系统剪贴板 (pbcopy): ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
         return true;
     } catch (err) {
         console.error('❌ 设置剪贴板失败:', err.message);
@@ -273,7 +295,7 @@ heartbeatTimer = setInterval(() => {
 let lastClipboard = '';
 setInterval(async () => {
     if (!isConnected) return;
-    
+
     const current = await getClipboard();
     if (current && current !== lastClipboard) {
         lastClipboard = current;
@@ -281,3 +303,15 @@ setInterval(async () => {
     }
 }, 1000);
 */
+
+// 全局错误处理 - 防止未捕获的异常导致进程退出
+process.on('uncaughtException', (err) => {
+    console.error('❌ 未捕获的异常:', err.message);
+    console.error('   堆栈:', err.stack);
+    // 不退出进程，继续运行
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ 未处理的 Promise rejection:', reason);
+    // 不退出进程，继续运行
+});
