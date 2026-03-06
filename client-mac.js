@@ -5,16 +5,11 @@
 const WebSocket = require('ws');
 const { exec, spawn } = require('child_process');
 const { promisify } = require('util');
-const { calculateReconnectDelay, MAX_RECONNECT_ATTEMPTS } = require('./utils');
+const { calculateReconnectDelay, MAX_RECONNECT_ATTEMPTS, ts } = require('./utils');
 const clipboardy = require('clipboardy');
 const { execa } = require('execa');
 
 const execAsync = promisify(exec);
-
-// 获取当前时间戳（用于日志）
-function ts() {
-    return new Date().toLocaleString('zh-CN');
-}
 
 // 配置服务器地址
 const SERVER_URL = process.env.SERVER_URL || 'ws://156.245.200.31:5001';
@@ -87,8 +82,8 @@ function connect() {
             : `${SERVER_URL}?room=${ROOM_ID}`)
         : SERVER_URL;
 
-    console.log(`[重连] 正在连接服务器: ${wsUrl}`);
-    console.log(`[房间] ${ROOM_DISPLAY}`);
+    console.log(`[${ts()}] [重连] 正在连接服务器: ${wsUrl}`);
+    console.log(`[${ts()}] [房间] ${ROOM_DISPLAY}`);
 
     try {
         ws = new WebSocket(wsUrl);
@@ -97,8 +92,8 @@ function connect() {
             isConnected = true;
             lastHeartbeat = Date.now();
             reconnect_attempts = 0;  // 连接成功后重置
-            console.log('[OK] 已连接到服务器');
-            console.log('[消息] 等待接收剪贴板消息...\n');
+            console.log(`[${ts()}] [OK] 已连接到服务器`);
+            console.log(`[${ts()}] [消息] 等待接收剪贴板消息...\n`);
 
             // 清除重连定时器
             if (reconnectTimer) {
@@ -110,7 +105,7 @@ function connect() {
         // 处理 ping - 自动响应 pong
         ws.on('ping', () => {
             lastHeartbeat = Date.now();
-            console.log('[心跳] 收到服务器心跳 ping，已自动响应 pong');
+            console.log(`[${ts()}] [心跳] 收到服务器心跳 ping，已自动响应 pong`);
         });
         
         ws.on('message', (data) => {
@@ -119,7 +114,7 @@ function connect() {
                 const message = JSON.parse(data.toString());
                 handleMessage(message);
             } catch (err) {
-                console.error('[错误] 处理消息失败:', err.message);
+                console.error(`[${ts()}] [错误] 处理消息失败:`, err.message);
             }
         });
         
@@ -132,17 +127,17 @@ function connect() {
 
             // 检查重连次数上限
             if (reconnect_attempts > MAX_RECONNECT_ATTEMPTS) {
-                console.log(`\n[警告] 已达到最大重连次数 (${MAX_RECONNECT_ATTEMPTS}次)，停止重连`);
-                console.log('[提示] 请检查网络连接或服务器状态后重启程序\n');
+                console.log(`\n[${ts()}] [警告] 已达到最大重连次数 (${MAX_RECONNECT_ATTEMPTS}次)，停止重连`);
+                console.log(`[${ts()}] [提示] 请检查网络连接或服务器状态后重启程序\n`);
                 process.exit(1);
             }
 
-            console.log(`[错误] 连接已断开，${reconnectDelay}ms 后重连 (重连次数: ${reconnect_attempts}/${MAX_RECONNECT_ATTEMPTS})`);
+            console.log(`[${ts()}] [错误] 连接已断开，${reconnectDelay}ms 后重连 (重连次数: ${reconnect_attempts}/${MAX_RECONNECT_ATTEMPTS})`);
 
             // 只有在没有手动触发重连时才自动重连
             if (!reconnectTimer) {
                 reconnectTimer = setTimeout(() => {
-                    console.log('[重连] 尝试重新连接...\n');
+                    console.log(`[${ts()}] [重连] 尝试重新连接...\n`);
                     reconnectTimer = null;
                     connect();
                 }, reconnectDelay);
@@ -150,11 +145,11 @@ function connect() {
         });
         
         ws.on('error', (err) => {
-            console.error('[错误] WebSocket 错误:', err.message);
+            console.error(`[${ts()}] [错误] WebSocket 错误:`, err.message);
         });
         
     } catch (err) {
-        console.error('[错误] 连接失败:', err.message);
+        console.error(`[${ts()}] [错误] 连接失败:`, err.message);
         // 连接失败也算作一次断开，增加重连计数
         reconnect_attempts++;
 
@@ -163,12 +158,12 @@ function connect() {
 
         // 检查重连次数上限
         if (reconnect_attempts > MAX_RECONNECT_ATTEMPTS) {
-            console.log(`\n[警告] 已达到最大重连次数 (${MAX_RECONNECT_ATTEMPTS}次)，停止重连`);
-            console.log('[提示] 请检查网络连接或服务器状态后重启程序\n');
+            console.log(`\n[${ts()}] [警告] 已达到最大重连次数 (${MAX_RECONNECT_ATTEMPTS}次)，停止重连`);
+            console.log(`[${ts()}] [提示] 请检查网络连接或服务器状态后重启程序\n`);
             process.exit(1);
         }
 
-        console.log(`${reconnectDelay}ms 后重试 (重连次数: ${reconnect_attempts}/${MAX_RECONNECT_ATTEMPTS})`);
+        console.log(`[${ts()}] ${reconnectDelay}ms 后重试 (重连次数: ${reconnect_attempts}/${MAX_RECONNECT_ATTEMPTS})`);
         reconnectTimer = setTimeout(connect, reconnectDelay);
     }
 }
@@ -179,11 +174,11 @@ function handleMessage(message) {
     
     switch (message.type) {
         case 'connected':
-            console.log(`[连接] [${timestamp}] ${message.message}`);
+            console.log(`[${ts()}] [连接] [${timestamp}] ${message.message}`);
             break;
 
         case 'online':
-            console.log(`[设备] 在线设备数: ${message.count}`);
+            console.log(`[${ts()}] [设备] 在线设备数: ${message.count}`);
             break;
 
         case 'clipboard':
@@ -192,8 +187,8 @@ function handleMessage(message) {
             const server_timestamp = message.timestamp || 0;
             const network_delay = receive_time - server_timestamp;
 
-            console.log(`\n[消息] [${timestamp}] 收到来自 ${message.from} 的剪贴板:`);
-            console.log(`   内容: ${message.text.substring(0, 100)}${message.text.length > 100 ? '...' : ''}`);
+            console.log(`\n[${ts()}] [消息] [${timestamp}] 收到来自 ${message.from} 的剪贴板:`);
+            console.log(`[${ts()}]    内容: ${message.text.substring(0, 100)}${message.text.length > 100 ? '...' : ''}`);
             if (server_timestamp > 0) {
                 console.log(`   [性能] 网络延迟: ${network_delay}ms (服务端发送时间: ${new Date(server_timestamp).toLocaleString('zh-CN')})`);
             }
@@ -204,28 +199,28 @@ function handleMessage(message) {
                 const clipboard_end = Date.now();
                 const clipboard_duration = clipboard_end - clipboard_start;
                 const total_duration = clipboard_end - receive_time;
-                console.log(`   [性能] setClipboard 耗时: ${clipboard_duration}ms, 总耗时: ${total_duration}ms`);
+                console.log(`[${ts()}]    [性能] setClipboard 耗时: ${clipboard_duration}ms, 总耗时: ${total_duration}ms`);
             }).catch(err => {
-                console.error('[错误] 设置剪贴板失败:', err.message);
+                console.error(`[${ts()}] [错误] 设置剪贴板失败:`, err.message);
             });
-            console.log('');
+            console.log(`[${ts()}] `);
             break;
 
         default:
-            console.log('[消息] 收到消息:', message);
+            console.log(`[${ts()}] [消息] 收到消息:`, message);
     }
 }
 
 // 主动发送剪贴板到服务器（可选功能）
 async function sendClipboard() {
     if (!isConnected || !ws || ws.readyState !== WebSocket.OPEN) {
-        console.log('[错误] 未连接到服务器');
+        console.log(`[${ts()}] [错误] 未连接到服务器`);
         return;
     }
 
     const text = await getClipboard();
     if (!text.trim()) {
-        console.log('[错误] 剪贴板为空');
+        console.log(`[${ts()}] [错误] 剪贴板为空`);
         return;
     }
 
@@ -236,12 +231,12 @@ async function sendClipboard() {
         timestamp: Date.now()
     }));
 
-    console.log('[OK] 已发送剪贴板到服务器');
+    console.log(`[${ts()}] [OK] 已发送剪贴板到服务器`);
 }
 
 // 优雅退出
 function gracefulShutdown() {
-    console.log('\n\n[停止] 正在退出...');
+    console.log(`\n\n[${ts()}] [停止] 正在退出...`);
     
     // 清理所有定时器
     if (reconnectTimer) {
@@ -287,8 +282,8 @@ heartbeatTimer = setInterval(() => {
     const timeSinceLastHeartbeat = Date.now() - lastHeartbeat;
     
     if (isConnected && timeSinceLastHeartbeat > HEARTBEAT_TIMEOUT) {
-        console.log(`\n[警告] 心跳超时 (${Math.floor(timeSinceLastHeartbeat / 1000)}秒未收到服务器消息)`);
-        console.log('[重连] 主动断开并重连...\n');
+        console.log(`\n[${ts()}] [警告] 心跳超时 (${Math.floor(timeSinceLastHeartbeat / 1000)}秒未收到服务器消息)`);
+        console.log(`[${ts()}] [重连] 主动断开并重连...\n`);
         
         // 清除可能存在的重连定时器，避免竞态条件
         if (reconnectTimer) {
@@ -306,7 +301,7 @@ heartbeatTimer = setInterval(() => {
     } else if (isConnected) {
         // 只在心跳异常时才输出日志，减少噪音
         if (timeSinceLastHeartbeat > 45000) {
-            console.log(`[警告] 心跳延迟 (距上次: ${Math.floor(timeSinceLastHeartbeat / 1000)}秒)`);
+            console.log(`[${ts()}] [警告] 心跳延迟 (距上次: ${Math.floor(timeSinceLastHeartbeat / 1000)}秒)`);
         }
     }
 }, HEARTBEAT_CHECK_INTERVAL);
@@ -328,12 +323,12 @@ setInterval(async () => {
 
 // 全局错误处理 - 防止未捕获的异常导致进程退出
 process.on('uncaughtException', (err) => {
-    console.error('[错误] 未捕获的异常:', err.message);
-    console.error('   堆栈:', err.stack);
+    console.error(`[${ts()}] [错误] 未捕获的异常:`, err.message);
+    console.error(`[${ts()}]    堆栈:`, err.stack);
     // 不退出进程，继续运行
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-    console.error('[错误] 未处理的 Promise rejection:', reason);
+    console.error(`[${ts()}] [错误] 未处理的 Promise rejection:`, reason);
     // 不退出进程，继续运行
 });

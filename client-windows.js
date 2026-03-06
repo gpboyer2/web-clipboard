@@ -5,7 +5,7 @@
 const WebSocket = require('ws');
 const { exec } = require('child_process');
 const { promisify } = require('util');
-const { calculateReconnectDelay, MAX_RECONNECT_ATTEMPTS } = require('./utils');
+const { calculateReconnectDelay, MAX_RECONNECT_ATTEMPTS, ts } = require('./utils');
 const clipboardy = require('clipboardy');
 const { execa } = require('execa');
 
@@ -34,30 +34,30 @@ async function setClipboard(text) {
     }
 
     if (text.length === 0) {
-        console.log('[警告] 剪贴板内容为空，跳过设置');
+        console.log(`[${ts()}] [警告] 剪贴板内容为空，跳过设置`);
         return true;
     }
 
     // 方式1: 优先使用 PowerShell
     try {
         await execa('powershell', ['-command', 'Set-Clipboard', '-Value', text]);
-        console.log(`[OK] 已同步到系统剪贴板 (PowerShell): ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
+        console.log(`[${ts()}] [OK] 已同步到系统剪贴板 (PowerShell): ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
         return true;
     } catch (err) {
-        console.log('[警告] PowerShell 失败，尝试 clipboardy...');
-        console.log(`   PowerShell 错误详情: ${err.message}`);
+        console.log(`[${ts()}] [警告] PowerShell 失败，尝试 clipboardy...`);
+        console.log(`[${ts()}]    PowerShell 错误详情: ${err.message}`);
     }
 
     // 方式2: 回退到 clipboardy
     try {
         await clipboardy.write(text);
-        console.log(`[OK] 已同步到系统剪贴板 (clipboardy): ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
+        console.log(`[${ts()}] [OK] 已同步到系统剪贴板 (clipboardy): ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
         return true;
     } catch (err) {
-        console.error('[错误] 设置剪贴板失败');
-        console.error(`   clipboardy 错误详情: ${err.message}`);
-        if (err.shortMessage) console.error(`   错误信息: ${err.shortMessage}`);
-        if (err.command) console.error(`   执行命令: ${err.command}`);
+        console.error(`[${ts()}] [错误] 设置剪贴板失败`);
+        console.error(`[${ts()}]    clipboardy 错误详情: ${err.message}`);
+        if (err.shortMessage) console.error(`[${ts()}]    错误信息: ${err.shortMessage}`);
+        if (err.command) console.error(`[${ts()}]    执行命令: ${err.command}`);
         return false;
     }
 }
@@ -68,9 +68,9 @@ async function getClipboard() {
         const { stdout } = await execAsync('powershell -command "Get-Clipboard"', { timeout: 5000 });
         return stdout ? stdout.trim() : '';
     } catch (err) {
-        console.error('[错误] 获取剪贴板失败:', err.message);
+        console.error(`[${ts()}] [错误] 获取剪贴板失败:`, err.message);
         if (err.code === 'ENOENT') {
-            console.error('[错误] PowerShell未找到，请确保Windows系统支持PowerShell');
+            console.error(`[${ts()}] [错误] PowerShell未找到，请确保Windows系统支持PowerShell`);
         }
         return '';
     }
@@ -85,8 +85,8 @@ function connect() {
             : `${SERVER_URL}?room=${ROOM_ID}`)
         : SERVER_URL;
 
-    console.log(`[重连] 正在连接服务器: ${wsUrl}`);
-    console.log(`[房间] ${ROOM_DISPLAY}`);
+    console.log(`[${ts()}] [重连] 正在连接服务器: ${wsUrl}`);
+    console.log(`[${ts()}] [房间] ${ROOM_DISPLAY}`);
 
     try {
         // 验证WebSocket构造函数
@@ -100,8 +100,8 @@ function connect() {
             isConnected = true;
             lastHeartbeat = Date.now();
             reconnect_attempts = 0;
-            console.log('[OK] 已连接到服务器');
-            console.log('[消息] 等待接收剪贴板消息...\n');
+            console.log(`[${ts()}] [OK] 已连接到服务器`);
+            console.log(`[${ts()}] [消息] 等待接收剪贴板消息...\n`);
 
             // 清除重连定时器
             if (reconnectTimer) {
@@ -113,7 +113,7 @@ function connect() {
         // 处理 ping - 自动响应 pong
         ws.on('ping', () => {
             lastHeartbeat = Date.now();
-            console.log('[心跳] 收到服务器心跳 ping，已自动响应 pong');
+            console.log(`[${ts()}] [心跳] 收到服务器心跳 ping，已自动响应 pong`);
         });
         
         ws.on('message', (data) => {
@@ -122,7 +122,7 @@ function connect() {
                 const message = JSON.parse(data.toString());
                 handleMessage(message);
             } catch (err) {
-                console.error('[错误] 处理消息失败:', err.message);
+                console.error(`[${ts()}] [错误] 处理消息失败:`, err.message);
             }
         });
         
@@ -135,17 +135,17 @@ function connect() {
 
             // 检查重连次数上限
             if (reconnect_attempts > MAX_RECONNECT_ATTEMPTS) {
-                console.log(`\n[警告] 已达到最大重连次数 (${MAX_RECONNECT_ATTEMPTS}次)，停止重连`);
-                console.log('[提示] 请检查网络连接或服务器状态后重启程序\n');
+                console.log(`\n[${ts()}] [警告] 已达到最大重连次数 (${MAX_RECONNECT_ATTEMPTS}次)，停止重连`);
+                console.log(`[${ts()}] [提示] 请检查网络连接或服务器状态后重启程序\n`);
                 process.exit(1);
             }
 
-            console.log(`[错误] 连接已断开，${reconnectDelay}ms 后重连 (重连次数: ${reconnect_attempts}/${MAX_RECONNECT_ATTEMPTS})`);
+            console.log(`[${ts()}] [错误] 连接已断开，${reconnectDelay}ms 后重连 (重连次数: ${reconnect_attempts}/${MAX_RECONNECT_ATTEMPTS})`);
 
             // 只有在没有手动触发重连时才自动重连
             if (!reconnectTimer) {
                 reconnectTimer = setTimeout(() => {
-                    console.log('[重连] 尝试重新连接...\n');
+                    console.log(`[${ts()}] [重连] 尝试重新连接...\n`);
                     reconnectTimer = null;
                     connect();
                 }, reconnectDelay);
@@ -153,11 +153,11 @@ function connect() {
         });
 
         ws.on('error', (err) => {
-            console.error('[错误] WebSocket 错误:', err.message);
+            console.error(`[${ts()}] [错误] WebSocket 错误:`, err.message);
         });
         
     } catch (err) {
-        console.error('[错误] 连接失败:', err.message);
+        console.error(`[${ts()}] [错误] 连接失败:`, err.message);
         // 连接失败也算作一次断开，增加重连计数
         reconnect_attempts++;
 
@@ -166,56 +166,54 @@ function connect() {
 
         // 检查重连次数上限
         if (reconnect_attempts > MAX_RECONNECT_ATTEMPTS) {
-            console.log(`\n[警告] 已达到最大重连次数 (${MAX_RECONNECT_ATTEMPTS}次)，停止重连`);
-            console.log('[提示] 请检查网络连接或服务器状态后重启程序\n');
+            console.log(`\n[${ts()}] [警告] 已达到最大重连次数 (${MAX_RECONNECT_ATTEMPTS}次)，停止重连`);
+            console.log(`[${ts()}] [提示] 请检查网络连接或服务器状态后重启程序\n`);
             process.exit(1);
         }
 
-        console.log(`${reconnectDelay}ms 后重试 (重连次数: ${reconnect_attempts}/${MAX_RECONNECT_ATTEMPTS})`);
+        console.log(`[${ts()}] ${reconnectDelay}ms 后重试 (重连次数: ${reconnect_attempts}/${MAX_RECONNECT_ATTEMPTS})`);
         reconnectTimer = setTimeout(connect, reconnectDelay);
     }
 }
 
 // 处理接收到的消息
 function handleMessage(message) {
-    const timestamp = new Date().toLocaleString('zh-CN');
-
     switch (message.type) {
         case 'connected':
-            console.log(`[连接] [${timestamp}] ${message.message}`);
+            console.log(`[${ts()}] [连接] ${message.message}`);
             break;
 
         case 'online':
-            console.log(`[设备] 在线设备数: ${message.count}`);
+            console.log(`[${ts()}] [设备] 在线设备数: ${message.count}`);
             break;
 
         case 'clipboard':
             // 核心功能：收到剪贴板内容，同步到系统
-            console.log(`\n[消息] [${timestamp}] 收到来自 ${message.from} 的剪贴板:`);
-            console.log(`   内容: ${message.text.substring(0, 100)}${message.text.length > 100 ? '...' : ''}`);
+            console.log(`\n[${ts()}] [消息] 收到来自 ${message.from} 的剪贴板:`);
+            console.log(`[${ts()}]    内容: ${message.text.substring(0, 100)}${message.text.length > 100 ? '...' : ''}`);
 
             // 非阻塞设置剪贴板
             setClipboard(message.text).catch(err => {
-                console.error('[错误] 设置剪贴板失败:', err.message);
+                console.error(`[${ts()}] [错误] 设置剪贴板失败:`, err.message);
             });
             console.log('');
             break;
 
         default:
-            console.log('[消息] 收到消息:', message);
+            console.log(`[${ts()}] [消息] 收到消息:`, message);
     }
 }
 
 // 主动发送剪贴板到服务器（可选功能）
 async function sendClipboard() {
     if (!isConnected || !ws || ws.readyState !== WebSocket.OPEN) {
-        console.log('[错误] 未连接到服务器');
+        console.log(`[${ts()}] [错误] 未连接到服务器`);
         return;
     }
 
     const text = await getClipboard();
     if (!text.trim()) {
-        console.log('[错误] 剪贴板为空');
+        console.log(`[${ts()}] [错误] 剪贴板为空`);
         return;
     }
 
@@ -226,12 +224,12 @@ async function sendClipboard() {
         timestamp: Date.now()
     }));
 
-    console.log('[OK] 已发送剪贴板到服务器');
+    console.log(`[${ts()}] [OK] 已发送剪贴板到服务器`);
 }
 
 // 优雅退出
 function gracefulShutdown() {
-    console.log('\n\n[停止] 正在退出...');
+    console.log(`\n\n[${ts()}] [停止] 正在退出...`);
 
     // 清理所有定时器
     if (reconnectTimer) {
@@ -277,8 +275,8 @@ heartbeatTimer = setInterval(() => {
     const timeSinceLastHeartbeat = Date.now() - lastHeartbeat;
 
     if (isConnected && timeSinceLastHeartbeat > HEARTBEAT_TIMEOUT) {
-        console.log(`\n[警告] 心跳超时 (${Math.floor(timeSinceLastHeartbeat / 1000)}秒未收到服务器消息)`);
-        console.log('[重连] 主动断开并重连...\n');
+        console.log(`\n[${ts()}] [警告] 心跳超时 (${Math.floor(timeSinceLastHeartbeat / 1000)}秒未收到服务器消息)`);
+        console.log(`[${ts()}] [重连] 主动断开并重连...\n`);
 
         // 清除可能存在的重连定时器，避免竞态条件
         if (reconnectTimer) {
@@ -296,7 +294,7 @@ heartbeatTimer = setInterval(() => {
     } else if (isConnected) {
         // 只在心跳异常时才输出日志，减少噪音
         if (timeSinceLastHeartbeat > 45000) {
-            console.log(`[警告] 心跳延迟 (距上次: ${Math.floor(timeSinceLastHeartbeat / 1000)}秒)`);
+            console.log(`[${ts()}] [警告] 心跳延迟 (距上次: ${Math.floor(timeSinceLastHeartbeat / 1000)}秒)`);
         }
     }
 }, HEARTBEAT_CHECK_INTERVAL);

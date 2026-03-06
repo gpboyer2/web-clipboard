@@ -9,7 +9,7 @@ const http = require('http');
 const WebSocket = require('ws');
 const fs = require('fs').promises;
 const path = require('path');
-const { isValidRoomId, generateQRCode, getLocalIP } = require('./utils');
+const { isValidRoomId, generateQRCode, getLocalIP, ts } = require('./utils');
 const crypto = require('crypto');
 
 const app = express();
@@ -84,7 +84,7 @@ async function getHistory(roomId = DEFAULT_ROOM_ID, limit = 10) {
         fileList.sort((a, b) => b.mtime - a.mtime);
         return fileList.slice(0, limit);
     } catch (err) {
-        console.error('获取历史记录失败:', err);
+        console.error(`[${ts()}] 获取历史记录失败:`, err);
         return [];
     }
 }
@@ -110,7 +110,7 @@ wss.on('connection', (ws, req) => {
 
     // 显示房间信息，主房间特殊标识
     const roomDisplay = roomId === '' ? '主房间' : (roomId || 'default');
-    console.log(`✅ 新客户端连接 (房间: ${roomDisplay})`);
+    console.log(`[${ts()}] [OK] 新客户端连接 (房间: ${roomDisplay})`);
 
     // 初始化房间
     if (!roomClients.has(roomId)) {
@@ -165,7 +165,7 @@ wss.on('connection', (ws, req) => {
         try {
             const data = JSON.parse(message);
             const roomDisplay = ws.roomId === '' ? '主房间' : ws.roomId;
-            console.log(`📨 收到消息 (房间: ${roomDisplay}):`, data.type);
+            console.log(`[${ts()}] [消息] 收到消息 (房间: ${roomDisplay}):`, data.type);
 
             if (data.type === 'clipboard') {
                 // 记录消息处理开始时间
@@ -185,10 +185,10 @@ wss.on('connection', (ws, req) => {
                 const broadcast_end = Date.now();
 
                 const process_end = Date.now();
-                console.log(`   [性能] 消息处理耗时: ${process_end - process_start}ms (广播: ${broadcast_end - broadcast_start}ms)`);
+                console.log(`[${ts()}]    [性能] 消息处理耗时: ${process_end - process_start}ms (广播: ${broadcast_end - broadcast_start}ms)`);
             }
         } catch (err) {
-            console.error('处理消息失败:', err);
+            console.error(`[${ts()}] 处理消息失败:`, err);
         }
     });
 
@@ -205,7 +205,7 @@ wss.on('connection', (ws, req) => {
             heartbeats.delete(ws);
         }
 
-        console.log(`❌ 客户端断开 (房间: ${roomDisplay}), 当前在线: ${clients ? clients.size : 0}`);
+        console.log(`[${ts()}] [错误] 客户端断开 (房间: ${roomDisplay}), 当前在线: ${clients ? clients.size : 0}`);
 
         // 广播在线人数给本房间
         if (clients) {
@@ -217,7 +217,7 @@ wss.on('connection', (ws, req) => {
     });
 
     ws.on('error', (err) => {
-        console.error('WebSocket 错误:', err);
+        console.error(`[${ts()}] WebSocket 错误:`, err);
         const roomId = ws.roomId;
         const clients = roomClients.get(roomId);
         const heartbeats = roomHeartbeats.get(roomId);
@@ -236,7 +236,7 @@ const heartbeatInterval = setInterval(() => {
     // 使用 setImmediate 避免阻塞事件循环
     setImmediate(() => {
         const heartbeat_start = Date.now();
-        console.log(`\n💓 [心跳检测] 开始执行 (时间: ${new Date(heartbeat_start).toLocaleString('zh-CN')})`);
+        console.log(`\n[${ts()}] [心跳] [心跳检测] 开始执行`);
 
         const now = Date.now();
         let deadConnections = 0;
@@ -252,7 +252,7 @@ const heartbeatInterval = setInterval(() => {
 
                 if (!heartbeat) {
                     const roomDisplay = roomId === '' ? '主房间' : roomId;
-                    console.log(`⚠️  发现未初始化心跳的连接 (房间: ${roomDisplay})，移除`);
+                    console.log(`[${ts()}] [警告] 发现未初始化心跳的连接 (房间: ${roomDisplay})，移除`);
                     client.terminate();
                     clients.delete(client);
                     deadConnections++;
@@ -264,7 +264,7 @@ const heartbeatInterval = setInterval(() => {
 
                 if (!heartbeat.isAlive) {
                     const roomDisplay = roomId === '' ? '主房间' : roomId;
-                    console.log(`❌ 客户端心跳超时 (房间: ${roomDisplay}, ${timeSinceLastPing}ms)，强制断开连接`);
+                    console.log(`[${ts()}] [错误] 客户端心跳超时 (房间: ${roomDisplay}, ${timeSinceLastPing}ms)，强制断开连接`);
                     client.terminate();
                     clients.delete(client);
                     heartbeats.delete(client);
@@ -285,14 +285,14 @@ const heartbeatInterval = setInterval(() => {
                         client.ping();
                     } else {
                         const roomDisplay = roomId === '' ? '主房间' : roomId;
-                        console.log(`⚠️  连接状态异常 (房间: ${roomDisplay}, readyState: ${client.readyState})，移除连接`);
+                        console.log(`[${ts()}] [警告] 连接状态异常 (房间: ${roomDisplay}, readyState: ${client.readyState})，移除连接`);
                         client.terminate();
                         clients.delete(client);
                         heartbeats.delete(client);
                         deadConnections++;
                     }
                 } catch (err) {
-                    console.error('❌ 发送心跳失败:', err.message);
+                    console.error(`[${ts()}] [错误] 发送心跳失败:`, err.message);
                     client.terminate();
                     clients.delete(client);
                     heartbeats.delete(client);
@@ -304,14 +304,14 @@ const heartbeatInterval = setInterval(() => {
         // 只在有异常时才输出详细日志
         if (deadConnections > 0) {
             const totalClients = Array.from(roomClients.values()).reduce((sum, set) => sum + set.size, 0);
-            console.log(`💓 [心跳检测] 清理了 ${deadConnections} 个失效连接`);
+            console.log(`[${ts()}] [心跳] [心跳检测] 清理了 ${deadConnections} 个失效连接`);
         }
 
         // 性能日志：心跳检测耗时
         const heartbeat_end = Date.now();
         const heartbeat_duration = heartbeat_end - heartbeat_start;
         const totalClients = Array.from(roomClients.values()).reduce((sum, set) => sum + set.size, 0);
-        console.log(`💓 [心跳检测] 完成，耗时: ${heartbeat_duration}ms，当前在线: ${totalClients} 个连接`);
+        console.log(`[${ts()}] [心跳] [心跳检测] 完成，耗时: ${heartbeat_duration}ms，当前在线: ${totalClients} 个连接`);
     });
 }, HEARTBEAT_INTERVAL);
 
@@ -331,7 +331,7 @@ function broadcastToRoom(roomId, data, excludeWs = null) {
                 client.send(message);
                 successCount++;
             } catch (err) {
-                console.error('❌ 发送消息失败:', err.message);
+                console.error(`[${ts()}] [错误] 发送消息失败:`, err.message);
                 failCount++;
                 // 发送失败，标记为需要清理
                 if (heartbeats) {
@@ -346,7 +346,7 @@ function broadcastToRoom(roomId, data, excludeWs = null) {
 
     if (data.type === 'clipboard') {
         const roomDisplay = roomId === '' ? '主房间' : roomId;
-        console.log(`📡 [房间 ${roomDisplay}] 广播剪贴板消息: 成功 ${successCount} 个, 失败 ${failCount} 个`);
+        console.log(`[${ts()}] [广播] [房间 ${roomDisplay}] 广播剪贴板消息: 成功 ${successCount} 个, 失败 ${failCount} 个`);
     }
 }
 
@@ -416,9 +416,9 @@ app.post('/send', async (req, res) => {
     const clients = roomClients.get(roomId);
     const onlineCount = clients ? clients.size : 0;
 
-    console.log(`\n📡 [API发送] 收到剪贴板内容 (房间: ${roomDisplay}, ${text.length} 字符)`);
-    console.log(`   预览: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
-    console.log(`   当前在线客户端: ${onlineCount}`);
+    console.log(`\n[${ts()}] [广播] [API发送] 收到剪贴板内容 (房间: ${roomDisplay}, ${text.length} 字符)`);
+    console.log(`[${ts()}]    预览: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
+    console.log(`[${ts()}]    当前在线客户端: ${onlineCount}`);
 
     // 保存历史记录
     await saveHistory(text, roomId);
@@ -431,7 +431,7 @@ app.post('/send', async (req, res) => {
         timestamp: Date.now()
     });
 
-    console.log(`✅ API发送完成\n`);
+    console.log(`[${ts()}] [OK] API发送完成\n`);
 
     res.json({
         success: true,
@@ -476,25 +476,25 @@ async function start() {
         const localIP = getLocalIP();
         const baseUrl = `http://${localIP}:${PORT}`;
 
-        console.log('\n' + '='.repeat(50));
-        console.log('     Web Clipboard Server (Node.js + WebSocket)');
-        console.log('='.repeat(50));
-        console.log(`本地访问: http://localhost:${PORT}`);
-        console.log(`手机访问: ${baseUrl}`);
-        console.log(`WebSocket: ws://${localIP}:${PORT}`);
-        console.log('='.repeat(50) + '\n');
-        console.log('💡 多用户隔离模式已启用');
-        console.log('💓 心跳检测已启动 (每 45秒检查一次)');
-        console.log('📱 每个用户使用独立的房间ID进行隔离');
-        console.log('🏠 主房间（不指定room参数）为总房间\n');
+        console.log(`\n[${ts()}] ${'='.repeat(50)}`);
+        console.log(`[${ts()}]      Web Clipboard Server (Node.js + WebSocket)`);
+        console.log(`[${ts()}] ${'='.repeat(50)}`);
+        console.log(`[${ts()}] 本地访问: http://localhost:${PORT}`);
+        console.log(`[${ts()}] 手机访问: ${baseUrl}`);
+        console.log(`[${ts()}] WebSocket: ws://${localIP}:${PORT}`);
+        console.log(`[${ts()}] ${'='.repeat(50)}\n`);
+        console.log(`[${ts()}] [提示] 多用户隔离模式已启用`);
+        console.log(`[${ts()}] [心跳] 心跳检测已启动 (每 45秒检查一次)`);
+        console.log(`[${ts()}] [手机] 每个用户使用独立的房间ID进行隔离`);
+        console.log(`[${ts()}] [房间] 主房间（不指定room参数）为总房间\n`);
 
         // 显示二维码
-        console.log('📱 手机扫码访问 (主房间):');
+        console.log(`[${ts()}] [手机] 手机扫码访问 (主房间):`);
         const qrcode = await generateQRCode(baseUrl);
         console.log(qrcode);
-        console.log('\n💡 提示: 在URL后添加 ?room=你的房间ID 来使用独立房间');
-        console.log('💡 主房间访问: 不添加参数或 ?room= (总房间)');
-        console.log('💡 生成新房间: POST /generate-room');
+        console.log(`\n[${ts()}] [提示] 提示: 在URL后添加 ?room=你的房间ID 来使用独立房间`);
+        console.log(`[${ts()}] [提示] 主房间访问: 不添加参数或 ?room= (总房间)`);
+        console.log(`[${ts()}] [提示] 生成新房间: POST /generate-room`);
     });
 }
 
@@ -502,7 +502,7 @@ start().catch(console.error);
 
 // 优雅退出
 process.on('SIGINT', () => {
-    console.log('\n\n🛑 正在关闭服务器...');
+    console.log(`\n\n[${ts()}] [停止] 正在关闭服务器...`);
     clearInterval(heartbeatInterval);
 
     // 关闭所有房间的所有连接
@@ -514,7 +514,7 @@ process.on('SIGINT', () => {
 });
 
 process.on('SIGTERM', () => {
-    console.log('\n\n🛑 正在关闭服务器...');
+    console.log(`\n\n[${ts()}] [停止] 正在关闭服务器...`);
     clearInterval(heartbeatInterval);
 
     // 关闭所有房间的所有连接

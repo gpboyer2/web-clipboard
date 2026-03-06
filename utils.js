@@ -9,6 +9,22 @@ const os = require('os');
 const execAsync = promisify(exec);
 
 /**
+ * 生成带毫秒的时间戳（北京时区）
+ * @returns {string} 格式：2026-03-06 14:30:45.123
+ */
+function ts() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    const milliseconds = String(now.getMilliseconds()).padStart(3, '0');
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${milliseconds}`;
+}
+
+/**
  * WebSocket 智能重连延迟配置
  * 第1次、第2次、第3次、第4次及以后的延迟时间(ms)
  */
@@ -60,8 +76,8 @@ async function generateQRCode(url) {
     } catch (err) {
         // 如果没有安装 qrencode，返回提示
         return `
-⚠️  未安装 qrencode 工具
-📦 安装方法:
+[警告] 未安装 qrencode 工具
+[安装] 安装方法:
    macOS: brew install qrencode
    Linux: apt install qrencode 或 yum install qrencode
 或访问在线生成: https://cli.im/url?${url}
@@ -91,5 +107,6 @@ module.exports = {
     MAX_RECONNECT_ATTEMPTS,
     isValidRoomId,
     generateQRCode,
-    getLocalIP
+    getLocalIP,
+    ts
 };

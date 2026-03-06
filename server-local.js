@@ -9,7 +9,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const { exec } = require('child_process');
 const { promisify } = require('util');
-const { generateQRCode, getLocalIP } = require('./utils');
+const { generateQRCode, getLocalIP, ts } = require('./utils');
 const { execa } = require('execa');
 
 const execAsync = promisify(exec);
@@ -33,7 +33,7 @@ async function setClipboard(text) {
         await execa('pbcopy', { input: text });
         return true;
     } catch (err) {
-        console.error('设置剪贴板失败:', err.message);
+        console.error(`[${ts()}] 设置剪贴板失败:`, err.message);
         return false;
     }
 }
@@ -43,7 +43,7 @@ async function getClipboard() {
         const { stdout } = await execAsync('pbpaste');
         return stdout;
     } catch (err) {
-        console.error('[错误] 获取剪贴板失败:', err.message);
+        console.error(`[${ts()}] [错误] 获取剪贴板失败:`, err.message);
         return '';
     }
 }
@@ -88,7 +88,7 @@ async function getHistory(limit = 10) {
         if (err.code === 'ENOENT') {
             return [];
         }
-        console.error('获取历史记录失败:', err);
+        console.error(`[${ts()}] 获取历史记录失败:`, err);
         return [];
     }
 }
@@ -97,7 +97,7 @@ async function getHistory(limit = 10) {
 const clients = new Set();
 
 wss.on('connection', (ws) => {
-    console.log('[OK] 新设备连接，当前在线:', clients.size + 1);
+    console.log(`[${ts()}] [OK] 新设备连接，当前在线: ${clients.size + 1}`);
     clients.add(ws);
 
     ws.send(JSON.stringify({
@@ -115,7 +115,7 @@ wss.on('connection', (ws) => {
     ws.on('message', (message) => {
         try {
             const data = JSON.parse(message);
-            console.log('[消息] 收到消息:', data.type);
+            console.log(`[${ts()}] [消息] 收到消息:`, data.type);
 
             if (data.type === 'clipboard') {
                 // 立即广播给其他客户端（最重要，确保实时同步）
@@ -128,23 +128,23 @@ wss.on('connection', (ws) => {
 
                 // 异步执行副作用（不阻塞）
                 setClipboard(data.text).then(() => {
-                    console.log('[OK] 已同步到系统剪贴板 (pbcopy):', data.text.substring(0, 50));
+                    console.log(`[${ts()}] [OK] 已同步到系统剪贴板 (pbcopy):`, data.text.substring(0, 50));
                 }).catch(err => {
-                    console.error('[错误] 同步到系统剪贴板失败:', err.message);
+                    console.error(`[${ts()}] [错误] 同步到系统剪贴板失败:`, err.message);
                 });
 
                 saveHistory(data.text).catch(err => {
-                    console.error('[错误] 保存历史记录失败:', err.message);
+                    console.error(`[${ts()}] [错误] 保存历史记录失败:`, err.message);
                 });
             }
         } catch (err) {
-            console.error('[错误] 处理消息失败:', err);
+            console.error(`[${ts()}] [错误] 处理消息失败:`, err);
         }
     });
 
     ws.on('close', () => {
         clients.delete(ws);
-        console.log('[断开] 设备断开，当前在线:', clients.size);
+        console.log(`[${ts()}] [断开] 设备断开，当前在线: ${clients.size}`);
 
         broadcast({
             type: 'online',
@@ -153,7 +153,7 @@ wss.on('connection', (ws) => {
     });
 
     ws.on('error', (err) => {
-        console.error('[错误] WebSocket 错误:', err);
+        console.error(`[${ts()}] [错误] WebSocket 错误:`, err);
         clients.delete(ws);
     });
 });
@@ -259,19 +259,19 @@ async function start() {
         const localIP = getLocalIP();
         const url = `http://${localIP}:${PORT}`;
 
-        console.log('\n' + '='.repeat(50));
-        console.log('     [手机] 本地模式 - Mac 直接当服务器');
-        console.log('='.repeat(50));
-        console.log(`本机访问: http://localhost:${PORT}`);
-        console.log(`手机访问: ${url}`);
-        console.log('='.repeat(50) + '\n');
-        console.log('[提示] 使用说明:');
-        console.log('   - 手机和 Mac 需在同一局域网');
-        console.log('   - 手机访问上面的地址即可同步剪贴板');
-        console.log('   - Mac 会自动同步到系统剪贴板\n');
+        console.log(`\n[${ts()}] ${'='.repeat(50)}`);
+        console.log(`[${ts()}]      [手机] 本地模式 - Mac 直接当服务器`);
+        console.log(`[${ts()}] ${'='.repeat(50)}`);
+        console.log(`[${ts()}] 本机访问: http://localhost:${PORT}`);
+        console.log(`[${ts()}] 手机访问: ${url}`);
+        console.log(`[${ts()}] ${'='.repeat(50)}\n`);
+        console.log(`[${ts()}] [提示] 使用说明:`);
+        console.log(`[${ts()}]    - 手机和 Mac 需在同一局域网`);
+        console.log(`[${ts()}]    - 手机访问上面的地址即可同步剪贴板`);
+        console.log(`[${ts()}]    - Mac 会自动同步到系统剪贴板\n`);
 
         // 显示二维码
-        console.log('[手机] 手机扫码访问:');
+        console.log(`[${ts()}] [手机] 手机扫码访问:`);
         const qrcode = await generateQRCode(url);
         console.log(qrcode);
     });
