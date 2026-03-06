@@ -112,26 +112,30 @@ wss.on('connection', (ws) => {
         count: clients.size
     });
 
-    ws.on('message', async (message) => {
+    ws.on('message', (message) => {
         try {
             const data = JSON.parse(message);
             console.log('[消息] 收到消息:', data.type);
 
             if (data.type === 'clipboard') {
-                // 同步到 Mac 系统剪贴板
-                await setClipboard(data.text);
-                console.log('[OK] 已同步到 Mac 剪贴板:', data.text.substring(0, 50));
-
-                // 保存历史记录
-                await saveHistory(data.text);
-
-                // 广播给其他客户端
+                // 立即广播给其他客户端（最重要，确保实时同步）
                 broadcast({
                     type: 'clipboard',
                     text: data.text,
                     from: data.from || 'unknown',
                     timestamp: Date.now()
                 }, ws);
+
+                // 异步执行副作用（不阻塞）
+                setClipboard(data.text).then(() => {
+                    console.log('[OK] 已同步到系统剪贴板 (pbcopy):', data.text.substring(0, 50));
+                }).catch(err => {
+                    console.error('[错误] 同步到系统剪贴板失败:', err.message);
+                });
+
+                saveHistory(data.text).catch(err => {
+                    console.error('[错误] 保存历史记录失败:', err.message);
+                });
             }
         } catch (err) {
             console.error('[错误] 处理消息失败:', err);

@@ -116,11 +116,11 @@ function connect() {
             console.log('[心跳] 收到服务器心跳 ping，已自动响应 pong');
         });
         
-        ws.on('message', async (data) => {
+        ws.on('message', (data) => {
             try {
                 lastHeartbeat = Date.now();
                 const message = JSON.parse(data.toString());
-                await handleMessage(message);
+                handleMessage(message);
             } catch (err) {
                 console.error('[错误] 处理消息失败:', err.message);
             }
@@ -177,7 +177,7 @@ function connect() {
 }
 
 // 处理接收到的消息
-async function handleMessage(message) {
+function handleMessage(message) {
     const timestamp = new Date().toLocaleString('zh-CN');
 
     switch (message.type) {
@@ -194,8 +194,10 @@ async function handleMessage(message) {
             console.log(`\n[消息] [${timestamp}] 收到来自 ${message.from} 的剪贴板:`);
             console.log(`   内容: ${message.text.substring(0, 100)}${message.text.length > 100 ? '...' : ''}`);
 
-            // 同步到系统剪贴板
-            await setClipboard(message.text);
+            // 非阻塞设置剪贴板
+            setClipboard(message.text).catch(err => {
+                console.error('[错误] 设置剪贴板失败:', err.message);
+            });
             console.log('');
             break;
 

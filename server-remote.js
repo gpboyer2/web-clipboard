@@ -161,22 +161,31 @@ wss.on('connection', (ws, req) => {
     });
     
     ws.on('message', (message) => {
+        const msg_receive_time = Date.now();
         try {
             const data = JSON.parse(message);
             const roomDisplay = ws.roomId === '' ? '主房间' : ws.roomId;
             console.log(`📨 收到消息 (房间: ${roomDisplay}):`, data.type);
 
             if (data.type === 'clipboard') {
-                // 保存历史记录（按房间ID隔离）
+                // 记录消息处理开始时间
+                const process_start = Date.now();
+
+                // 保存历史记录（按房间ID隔离）- 异步执行
                 saveHistory(data.text, ws.roomId).catch(console.error);
 
                 // 广播给同房间的客户端（除了发送者）
+                const broadcast_start = Date.now();
                 broadcastToRoom(ws.roomId, {
                     type: 'clipboard',
                     text: data.text,
                     from: data.from || 'unknown',
                     timestamp: Date.now()
                 }, ws);
+                const broadcast_end = Date.now();
+
+                const process_end = Date.now();
+                console.log(`   [性能] 消息处理耗时: ${process_end - process_start}ms (广播: ${broadcast_end - broadcast_start}ms)`);
             }
         } catch (err) {
             console.error('处理消息失败:', err);
@@ -224,74 +233,86 @@ wss.on('connection', (ws, req) => {
 
 // 心跳检测定时器
 const heartbeatInterval = setInterval(() => {
-    const now = Date.now();
-    let deadConnections = 0;
+    // 使用 setImmediate 避免阻塞事件循环
+    setImmediate(() => {
+        const heartbeat_start = Date.now();
+        console.log(`\n💓 [心跳检测] 开始执行 (时间: ${new Date(heartbeat_start).toLocaleString('zh-CN')})`);
 
-    // 遍历所有房间
-    roomClients.forEach((clients, roomId) => {
-        const heartbeats = roomHeartbeats.get(roomId);
+        const now = Date.now();
+        let deadConnections = 0;
 
-        if (!heartbeats) return;
+        // 遍历所有房间
+        roomClients.forEach((clients, roomId) => {
+            const heartbeats = roomHeartbeats.get(roomId);
 
-        clients.forEach(client => {
-            const heartbeat = heartbeats.get(client);
+            if (!heartbeats) return;
 
-            if (!heartbeat) {
-                const roomDisplay = roomId === '' ? '主房间' : roomId;
-                console.log(`⚠️  发现未初始化心跳的连接 (房间: ${roomDisplay})，移除`);
-                client.terminate();
-                clients.delete(client);
-                deadConnections++;
-                return;
-            }
+            clients.forEach(client => {
+                const heartbeat = heartbeats.get(client);
 
-            // 检查上次心跳时间
-            const timeSinceLastPing = now - heartbeat.lastPing;
-
-            if (!heartbeat.isAlive) {
-                const roomDisplay = roomId === '' ? '主房间' : roomId;
-                console.log(`❌ 客户端心跳超时 (房间: ${roomDisplay}, ${timeSinceLastPing}ms)，强制断开连接`);
-                client.terminate();
-                clients.delete(client);
-                heartbeats.delete(client);
-                deadConnections++;
-
-                // 广播在线人数更新给本房间
-                broadcastToRoom(roomId, {
-                    type: 'online',
-                    count: clients.size
-                });
-                return;
-            }
-
-            // 发送 ping
-            heartbeat.isAlive = false;
-            try {
-                if (client.readyState === WebSocket.OPEN) {
-                    client.ping();
-                } else {
+                if (!heartbeat) {
                     const roomDisplay = roomId === '' ? '主房间' : roomId;
-                    console.log(`⚠️  连接状态异常 (房间: ${roomDisplay}, readyState: ${client.readyState})，移除连接`);
+                    console.log(`⚠️  发现未初始化心跳的连接 (房间: ${roomDisplay})，移除`);
+                    client.terminate();
+                    clients.delete(client);
+                    deadConnections++;
+                    return;
+                }
+
+                // 检查上次心跳时间
+                const timeSinceLastPing = now - heartbeat.lastPing;
+
+                if (!heartbeat.isAlive) {
+                    const roomDisplay = roomId === '' ? '主房间' : roomId;
+                    console.log(`❌ 客户端心跳超时 (房间: ${roomDisplay}, ${timeSinceLastPing}ms)，强制断开连接`);
+                    client.terminate();
+                    clients.delete(client);
+                    heartbeats.delete(client);
+                    deadConnections++;
+
+                    // 广播在线人数更新给本房间
+                    broadcastToRoom(roomId, {
+                        type: 'online',
+                        count: clients.size
+                    });
+                    return;
+                }
+
+                // 发送 ping
+                heartbeat.isAlive = false;
+                try {
+                    if (client.readyState === WebSocket.OPEN) {
+                        client.ping();
+                    } else {
+                        const roomDisplay = roomId === '' ? '主房间' : roomId;
+                        console.log(`⚠️  连接状态异常 (房间: ${roomDisplay}, readyState: ${client.readyState})，移除连接`);
+                        client.terminate();
+                        clients.delete(client);
+                        heartbeats.delete(client);
+                        deadConnections++;
+                    }
+                } catch (err) {
+                    console.error('❌ 发送心跳失败:', err.message);
                     client.terminate();
                     clients.delete(client);
                     heartbeats.delete(client);
                     deadConnections++;
                 }
-            } catch (err) {
-                console.error('❌ 发送心跳失败:', err.message);
-                client.terminate();
-                clients.delete(client);
-                heartbeats.delete(client);
-                deadConnections++;
-            }
+            });
         });
-    });
 
-    // 只在有异常时才输出详细日志
-    if (deadConnections > 0) {
+        // 只在有异常时才输出详细日志
+        if (deadConnections > 0) {
+            const totalClients = Array.from(roomClients.values()).reduce((sum, set) => sum + set.size, 0);
+            console.log(`💓 [心跳检测] 清理了 ${deadConnections} 个失效连接`);
+        }
+
+        // 性能日志：心跳检测耗时
+        const heartbeat_end = Date.now();
+        const heartbeat_duration = heartbeat_end - heartbeat_start;
         const totalClients = Array.from(roomClients.values()).reduce((sum, set) => sum + set.size, 0);
-        console.log(`\n💓 [心跳检测] 清理了 ${deadConnections} 个失效连接，当前在线: ${totalClients}\n`);
-    }
+        console.log(`💓 [心跳检测] 完成，耗时: ${heartbeat_duration}ms，当前在线: ${totalClients} 个连接`);
+    });
 }, HEARTBEAT_INTERVAL);
 
 // 广播消息给指定房间的所有客户端（可选排除某个客户端）

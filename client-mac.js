@@ -11,6 +11,11 @@ const { execa } = require('execa');
 
 const execAsync = promisify(exec);
 
+// 获取当前时间戳（用于日志）
+function ts() {
+    return new Date().toLocaleString('zh-CN');
+}
+
 // 配置服务器地址
 const SERVER_URL = process.env.SERVER_URL || 'ws://156.245.200.31:5001';
 const ROOM_ID = process.env.ROOM_ID || ''; // 空字符串表示主房间
@@ -34,30 +39,30 @@ async function setClipboard(text) {
     }
 
     if (text.length === 0) {
-        console.log('[警告] 剪贴板内容为空，跳过设置');
+        console.log(`[${ts()}] [警告] 剪贴板内容为空，跳过设置`);
         return true;
     }
 
     // 方式1: 优先使用 pbcopy
     try {
         await execa('pbcopy', { input: text });
-        console.log(`[OK] 已同步到系统剪贴板 (pbcopy): ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
+        console.log(`[${ts()}] [OK] 已同步到系统剪贴板 (pbcopy): ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
         return true;
     } catch (err) {
-        console.log('[警告] pbcopy 失败，尝试 clipboardy...');
-        console.log(`   pbcopy 错误详情: ${err.message}`);
+        console.log(`[${ts()}] [警告] pbcopy 失败，尝试 clipboardy...`);
+        console.log(`[${ts()}]    pbcopy 错误详情: ${err.message}`);
     }
 
     // 方式2: 回退到 clipboardy
     try {
         await clipboardy.write(text);
-        console.log(`[OK] 已同步到系统剪贴板 (clipboardy): ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
+        console.log(`[${ts()}] [OK] 已同步到系统剪贴板 (clipboardy): ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
         return true;
     } catch (err) {
-        console.error('[错误] 设置剪贴板失败');
-        console.error(`   clipboardy 错误详情: ${err.message}`);
-        if (err.shortMessage) console.error(`   错误信息: ${err.shortMessage}`);
-        if (err.command) console.error(`   执行命令: ${err.command}`);
+        console.error(`[${ts()}] [错误] 设置剪贴板失败`);
+        console.error(`[${ts()}]    clipboardy 错误详情: ${err.message}`);
+        if (err.shortMessage) console.error(`[${ts()}]    错误信息: ${err.shortMessage}`);
+        if (err.command) console.error(`[${ts()}]    执行命令: ${err.command}`);
         return false;
     }
 }
@@ -68,7 +73,7 @@ async function getClipboard() {
         const { stdout } = await execAsync('pbpaste');
         return stdout;
     } catch (err) {
-        console.error('[错误] 获取剪贴板失败:', err.message);
+        console.error(`[${ts()}] [错误] 获取剪贴板失败:`, err.message);
         return '';
     }
 }
@@ -108,11 +113,11 @@ function connect() {
             console.log('[心跳] 收到服务器心跳 ping，已自动响应 pong');
         });
         
-        ws.on('message', async (data) => {
+        ws.on('message', (data) => {
             try {
                 lastHeartbeat = Date.now(); // 更新心跳时间
                 const message = JSON.parse(data.toString());
-                await handleMessage(message);
+                handleMessage(message);
             } catch (err) {
                 console.error('[错误] 处理消息失败:', err.message);
             }
@@ -169,7 +174,7 @@ function connect() {
 }
 
 // 处理接收到的消息
-async function handleMessage(message) {
+function handleMessage(message) {
     const timestamp = new Date().toLocaleString('zh-CN');
     
     switch (message.type) {
@@ -183,11 +188,26 @@ async function handleMessage(message) {
 
         case 'clipboard':
             // 核心功能：收到剪贴板内容，同步到系统
+            const receive_time = Date.now();
+            const server_timestamp = message.timestamp || 0;
+            const network_delay = receive_time - server_timestamp;
+
             console.log(`\n[消息] [${timestamp}] 收到来自 ${message.from} 的剪贴板:`);
             console.log(`   内容: ${message.text.substring(0, 100)}${message.text.length > 100 ? '...' : ''}`);
+            if (server_timestamp > 0) {
+                console.log(`   [性能] 网络延迟: ${network_delay}ms (服务端发送时间: ${new Date(server_timestamp).toLocaleString('zh-CN')})`);
+            }
 
-            // 同步到系统剪贴板
-            await setClipboard(message.text);
+            // 非阻塞设置剪贴板（记录耗时）
+            const clipboard_start = Date.now();
+            setClipboard(message.text).then(() => {
+                const clipboard_end = Date.now();
+                const clipboard_duration = clipboard_end - clipboard_start;
+                const total_duration = clipboard_end - receive_time;
+                console.log(`   [性能] setClipboard 耗时: ${clipboard_duration}ms, 总耗时: ${total_duration}ms`);
+            }).catch(err => {
+                console.error('[错误] 设置剪贴板失败:', err.message);
+            });
             console.log('');
             break;
 
