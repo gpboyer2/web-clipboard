@@ -381,6 +381,47 @@ app.get('/history', async (req, res) => {
     res.json({ success: true, roomId: roomDisplay, list });
 });
 
+// 清空历史记录
+app.delete('/history', async (req, res) => {
+    const roomId = req.query.room || DEFAULT_ROOM_ID;
+    const roomHistoryDir = path.join(HISTORY_DIR, roomId || 'main');
+    const roomDisplay = roomId === '' ? '主房间' : roomId;
+
+    try {
+        await fs.access(roomHistoryDir);
+    } catch {
+        // 房间目录不存在，视为已清空
+        return res.json({
+            status: 'success',
+            message: '历史记录已清空',
+            datum: null
+        });
+    }
+
+    try {
+        // 递归删除目录下的所有文件
+        const files = await fs.readdir(roomHistoryDir);
+        await Promise.all(
+            files.map(file => fs.unlink(path.join(roomHistoryDir, file)))
+        );
+
+        console.log(`[${ts()}] [清空] 房间 ${roomDisplay} 历史记录已清空 (${files.length} 个文件)`);
+
+        res.json({
+            status: 'success',
+            message: '历史记录已清空',
+            datum: { deletedCount: files.length }
+        });
+    } catch (err) {
+        console.error(`[${ts()}] [错误] 清空历史记录失败:`, err);
+        res.json({
+            status: 'error',
+            message: '清空历史记录失败',
+            datum: null
+        });
+    }
+});
+
 app.post('/generate-room', async (req, res) => {
     const { room } = req.body;
     const roomId = room;
