@@ -4,9 +4,9 @@
  * 默认连接主房间（公共房间）
  */
 
-const { spawn } = require('child_process');
-const path = require('path');
-const { generateQRCode } = require('./utils');
+import { spawn } from 'child_process';
+import path from 'path';
+import { generateQRCode } from './utils.js';
 
 const clientScript = path.join(__dirname, 'client-mac.js');
 const serverUrl = 'http://156.245.200.31:5001';

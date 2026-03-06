@@ -134,7 +134,7 @@ detect_arch() {
     esac
 }
 
-# 获取对应的 pkg 构建命令
+# 获取对应的 nexe 构建命令
 get_build_command() {
     local os=$1
     local arch=$2
@@ -142,16 +142,16 @@ get_build_command() {
     case "$os" in
         mac)
             if [ "$arch" = "arm64" ]; then
-                echo "pkg:build:mac_arm64"
+                echo "nexe:build:mac_arm64"
             else
-                echo "pkg:build:mac_x64"
+                echo "nexe:build:mac_x64"
             fi
             ;;
         win)
-            echo "pkg:build:win"
+            echo "nexe:build:win"
             ;;
         linux)
-            echo "pkg:build:linux"
+            echo "nexe:build:linux"
             ;;
         *)
             echo ""
@@ -177,11 +177,11 @@ do_build() {
 # 显示构建结果
 show_result() {
     local project_root=$(get_project_root)
-    local output_dir="$project_root/release-build/pkg"
+    local output_dir="$project_root/release-build/nexe"
 
     echo ""
     echo "========================================"
-    echo "构建产物位于: release-build/pkg/"
+    echo "构建产物位于: release-build/nexe/"
     echo "========================================"
     echo ""
     echo "产物列表:"

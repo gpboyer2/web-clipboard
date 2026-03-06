@@ -15,12 +15,12 @@
     "client:windows": "node client-windows.js",
     "dev:local": "nodemon server-local.js",
     "dev:remote": "nodemon server-remote.js",
-    "pkg:build:win": "pkg . --targets node18-win-x64 --output release-build/pkg/win/web-clipboard.exe",
-    "pkg:build:mac_x64": "pkg . --targets node18-macos-x64 --output release-build/pkg/mac/web-clipboard-x64",
-    "pkg:build:mac_arm64": "pkg . --targets node18-macos-arm64 --output release-build/pkg/mac/web-clipboard-arm64",
-    "pkg:build:linux": "pkg . --targets node18-linux-x64 --output release-build/pkg/linux/web-clipboard",
-    "pkg:build:all": "npm run pkg:build:win && npm run pkg:build:mac_x64 && npm run pkg:build:mac_arm64 && npm run pkg:build:linux",
-    "pkg:clean": "rm -rf release-build/pkg"
+    "nexe:build:win": "nexe --build --target windows-x64-18.18.2 --output release-build/nexe/win/web-clipboard.exe",
+    "nexe:build:mac_x64": "nexe --build --target macos-x64-18.18.2 --output release-build/nexe/mac/web-clipboard-x64",
+    "nexe:build:mac_arm64": "nexe --build --target macos-arm64-18.18.2 --output release-build/nexe/mac/web-clipboard-arm64",
+    "nexe:build:linux": "nexe --build --target linux-x64-18.18.2 --output release-build/nexe/linux/web-clipboard",
+    "nexe:build:all": "npm run nexe:build:win && npm run nexe:build:mac_x64 && npm run nexe:build:mac_arm64 && npm run nexe:build:linux",
+    "nexe:clean": "rm -rf release-build/nexe"
   },
   "keywords": [
     "clipboard",
@@ -38,24 +38,6 @@
   },
   "devDependencies": {
     "nodemon": "^3.0.1",
-    "pkg": "^5.8.1"
-  },
-  "pkg": {
-    "scripts": [
-      "interactive.js",
-      "utils.js"
-    ],
-    "assets": [
-      "node_modules/clipboardy/**/*",
-      "node_modules/execa/**/*",
-      "node_modules/ws/**/*"
-    ],
-    "outputPath": "release-build/pkg",
-    "targets": [
-      "node18-win-x64",
-      "node18-macos-x64",
-      "node18-macos-arm64",
-      "node18-linux-x64"
-    ]
+    "nexe": "^5.0.0-beta.4"
   }
 }

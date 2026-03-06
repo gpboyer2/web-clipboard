@@ -52,15 +52,14 @@ jobs:
         run: npm ci
 
       - name: 执行构建
-        run: npm run pkg:build:mac_x64
+        run: npm run nexe:build:mac_x64
 
       - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
           name: web-clipboard-macos-x64
-          path: release-build/pkg/*
-          retention-days: 30
-          if-no-files-found: warn
+          path: release-build/nexe/*
+
 
   build-macos-arm64:
     name: Build macOS (arm64)
@@ -81,15 +80,13 @@ jobs:
         run: npm ci
 
       - name: 执行构建
-        run: npm run pkg:build:mac_arm64
+        run: npm run nexe:build:mac_arm64
 
       - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
           name: web-clipboard-macos-arm64
-          path: release-build/pkg/*
-          retention-days: 30
-          if-no-files-found: warn
+          path: release-build/nexe/*
 
   build-windows:
     name: Build Windows (x64)
@@ -110,15 +107,13 @@ jobs:
         run: npm ci
 
       - name: 执行构建
-        run: npm run pkg:build:win
+        run: npm run nexe:build:win
 
       - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
           name: web-clipboard-windows-x64
-          path: release-build/pkg/*
-          retention-days: 30
-          if-no-files-found: warn
+          path: release-build/nexe/*
 
   build-linux:
     name: Build Linux (x64)
@@ -139,15 +134,13 @@ jobs:
         run: npm ci
 
       - name: 执行构建
-        run: npm run pkg:build:linux
+        run: npm run nexe:build:linux
 
       - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
           name: web-clipboard-linux-x64
-          path: release-build/pkg/*
-          retention-days: 30
-          if-no-files-found: warn
+          path: release-build/nexe/*
 
   create-release:
     name: 创建 Release

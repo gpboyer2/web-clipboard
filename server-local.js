@@ -2,21 +2,21 @@
 // 本地模式服务器 - Mac 直接当服务器
 // 手机直接连接 Mac，Mac 自动同步系统剪贴板
 
-const express = require('express');
-const http = require('http');
-const WebSocket = require('ws');
-const fs = require('fs').promises;
-const path = require('path');
-const { exec } = require('child_process');
-const { promisify } = require('util');
-const { generateQRCode, getLocalIP, ts } = require('./utils');
-const { execa } = require('execa');
+import express from 'express';
+import http from 'http';
+import { WebSocketServer } from 'ws';
+import fs from 'fs/promises';
+import path from 'path';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import { generateQRCode, getLocalIP, ts } from './utils.js';
+import { execa } from 'execa';
 
 const execAsync = promisify(exec);
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocketServer({ server });
 
 // 配置
 const PORT = process.env.PORT || 5001;

@@ -4,17 +4,17 @@
  * 支持多设备实时同步剪贴板
  */
 
-const express = require('express');
-const http = require('http');
-const WebSocket = require('ws');
-const fs = require('fs').promises;
-const path = require('path');
-const { isValidRoomId, generateQRCode, getLocalIP, ts } = require('./utils');
-const crypto = require('crypto');
+import express from 'express';
+import http from 'http';
+import { WebSocketServer } from 'ws';
+import fs from 'fs/promises';
+import path from 'path';
+import { isValidRoomId, generateQRCode, getLocalIP, ts } from './utils.js';
+import crypto from 'crypto';
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocketServer({ server });
 
 // 配置
 const PORT = process.env.PORT || 5001;

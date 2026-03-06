@@ -2,12 +2,12 @@
 // Windows 电脑端监听脚本
 // 连接服务器 WebSocket，自动同步剪贴板到系统
 
-const WebSocket = require('ws');
-const { exec } = require('child_process');
-const { promisify } = require('util');
-const { calculateReconnectDelay, MAX_RECONNECT_ATTEMPTS, ts } = require('./utils');
-const clipboardy = require('clipboardy');
-const { execa } = require('execa');
+import WebSocket from 'ws';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import { calculateReconnectDelay, MAX_RECONNECT_ATTEMPTS, ts } from './utils.js';
+import clipboardy from 'clipboardy';
+import { execa } from 'execa';
 
 const execAsync = promisify(exec);
 

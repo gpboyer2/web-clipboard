@@ -12,6 +12,7 @@ node_modules/
 # 构建输出
 dist/
 release-build/
+build/
 
 # macOS
 .DS_Store
