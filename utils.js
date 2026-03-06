@@ -2,9 +2,9 @@
  * 工具函数模块
  */
 
-const { exec } = require('child_process');
-const { promisify } = require('util');
-const os = require('os');
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import os from 'os';
 
 const execAsync = promisify(exec);
 
@@ -101,7 +101,7 @@ function getLocalIP() {
     return 'localhost';
 }
 
-module.exports = {
+export {
     calculateReconnectDelay,
     RECONNECT_DELAYS,
     MAX_RECONNECT_ATTEMPTS,

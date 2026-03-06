@@ -1,6 +1,7 @@
 {
   "name": "web-clipboard",
   "version": "2.0.0",
+  "type": "module",
   "description": "多设备实时同步剪贴板 - WebSocket 版本",
   "main": "interactive.js",
   "bin": {
@@ -42,10 +43,14 @@
   "pkg": {
     "scripts": [
       "interactive.js",
-      "*.js",
       "utils.js"
     ],
-    "assets": [],
+    "assets": [
+      "node_modules/clipboardy/**/*",
+      "node_modules/execa/**/*",
+      "node_modules/ws/**/*"
+    ],
+    "outputPath": "release-build/pkg",
     "targets": [
       "node18-win-x64",
       "node18-macos-x64",

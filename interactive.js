@@ -7,14 +7,14 @@
 // - Linux: xclip, xsel, wl-copy
 // - Windows: PowerShell Set-Clipboard
 
-const path = require('path');
-const readline = require('readline');
-const WebSocket = require('ws');
-const { exec } = require('child_process');
-const { promisify } = require('util');
-const { isValidRoomId, calculateReconnectDelay, MAX_RECONNECT_ATTEMPTS } = require('./utils');
-const clipboardy = require('clipboardy');
-const { execa } = require('execa');
+import path from 'path';
+import readline from 'readline';
+import { WebSocket } from 'ws';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import { isValidRoomId, calculateReconnectDelay, MAX_RECONNECT_ATTEMPTS } from './utils.js';
+import clipboardy from 'clipboardy';
+import { execa } from 'execa';
 
 const execAsync = promisify(exec);
 
