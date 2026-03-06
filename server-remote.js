@@ -165,7 +165,7 @@ wss.on('connection', (ws, req) => {
         try {
             const data = JSON.parse(message);
             const roomDisplay = ws.roomId === '' ? '主房间' : ws.roomId;
-            console.log(`[${ts()}] [消息] 收到消息 (房间: ${roomDisplay}):`, data.type);
+            console.log(`[${ts()}] [剪贴板] 收到 (房间: ${roomDisplay})`);
 
             if (data.type === 'clipboard') {
                 // 记录消息处理开始时间
@@ -236,7 +236,7 @@ const heartbeatInterval = setInterval(() => {
     // 使用 setImmediate 避免阻塞事件循环
     setImmediate(() => {
         const heartbeat_start = Date.now();
-        console.log(`\n[${ts()}] [心跳] [心跳检测] 开始执行`);
+        console.log(`\n[${ts()}] [心跳] 开始检测`);
 
         const now = Date.now();
         let deadConnections = 0;
@@ -304,14 +304,14 @@ const heartbeatInterval = setInterval(() => {
         // 只在有异常时才输出详细日志
         if (deadConnections > 0) {
             const totalClients = Array.from(roomClients.values()).reduce((sum, set) => sum + set.size, 0);
-            console.log(`[${ts()}] [心跳] [心跳检测] 清理了 ${deadConnections} 个失效连接`);
+            console.log(`[${ts()}] [心跳] 清理 ${deadConnections} 个失效连接`);
         }
 
         // 性能日志：心跳检测耗时
         const heartbeat_end = Date.now();
         const heartbeat_duration = heartbeat_end - heartbeat_start;
         const totalClients = Array.from(roomClients.values()).reduce((sum, set) => sum + set.size, 0);
-        console.log(`[${ts()}] [心跳] [心跳检测] 完成，耗时: ${heartbeat_duration}ms，当前在线: ${totalClients} 个连接`);
+        console.log(`[${ts()}] [心跳] 检测完成，耗时: ${heartbeat_duration}ms，在线: ${totalClients}`);
     });
 }, HEARTBEAT_INTERVAL);
 
@@ -346,7 +346,7 @@ function broadcastToRoom(roomId, data, excludeWs = null) {
 
     if (data.type === 'clipboard') {
         const roomDisplay = roomId === '' ? '主房间' : roomId;
-        console.log(`[${ts()}] [广播] [房间 ${roomDisplay}] 广播剪贴板消息: 成功 ${successCount} 个, 失败 ${failCount} 个`);
+        console.log(`[${ts()}] [广播] 房间[${roomDisplay}] 成功 ${successCount}, 失败 ${failCount}`);
     }
 }
 
@@ -416,7 +416,7 @@ app.post('/send', async (req, res) => {
     const clients = roomClients.get(roomId);
     const onlineCount = clients ? clients.size : 0;
 
-    console.log(`\n[${ts()}] [广播] [API发送] 收到剪贴板内容 (房间: ${roomDisplay}, ${text.length} 字符)`);
+    console.log(`\n[${ts()}] [API] 收到剪贴板 (房间: ${roomDisplay}, ${text.length} 字符)`);
     console.log(`[${ts()}]    预览: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
     console.log(`[${ts()}]    当前在线客户端: ${onlineCount}`);
 
@@ -486,7 +486,7 @@ async function start() {
         console.log(`[${ts()}] [提示] 多用户隔离模式已启用`);
         console.log(`[${ts()}] [心跳] 心跳检测已启动 (每 45秒检查一次)`);
         console.log(`[${ts()}] [手机] 每个用户使用独立的房间ID进行隔离`);
-        console.log(`[${ts()}] [房间] 主房间（不指定room参数）为总房间\n`);
+        console.log(`[${ts()}] [房间] 主房间(无room参数)为总房间\n`);
 
         // 显示二维码
         console.log(`[${ts()}] [手机] 手机扫码访问 (主房间):`);

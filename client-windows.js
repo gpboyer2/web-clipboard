@@ -189,7 +189,7 @@ function handleMessage(message) {
 
         case 'clipboard':
             // 核心功能：收到剪贴板内容，同步到系统
-            console.log(`\n[${ts()}] [消息] 收到来自 ${message.from} 的剪贴板:`);
+            console.log(`\n[${ts()}] [剪贴板] 收到来自 ${message.from}:`);
             console.log(`[${ts()}]    内容: ${message.text.substring(0, 100)}${message.text.length > 100 ? '...' : ''}`);
 
             // 非阻塞设置剪贴板
@@ -200,7 +200,7 @@ function handleMessage(message) {
             break;
 
         default:
-            console.log(`[${ts()}] [消息] 收到消息:`, message);
+            console.log(`[${ts()}] [消息] 未知类型:`, message);
     }
 }
 

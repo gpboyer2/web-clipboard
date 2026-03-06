@@ -280,7 +280,7 @@ async function handleMessage(message) {
 
     switch (message.type) {
         case 'connected':
-            console.log(`[连接] [${timestamp}] ${message.message}`);
+            console.log(`[连接] ${message.message}`);
             break;
 
         case 'online':
@@ -288,14 +288,14 @@ async function handleMessage(message) {
             break;
 
         case 'clipboard':
-            console.log(`\n[消息] [${timestamp}] 收到来自 ${message.from} 的剪贴板:`);
+            console.log(`\n[剪贴板] 收到来自 ${message.from}:`);
             console.log(`   内容: ${message.text.substring(0, 100)}${message.text.length > 100 ? '...' : ''}`);
             await setClipboard(message.text);
             console.log('');
             break;
 
         default:
-            console.log('[消息] 收到消息:', message);
+            console.log('[消息] 未知类型:', message);
     }
 }
 
@@ -355,7 +355,7 @@ async function main() {
 
     console.log('');
     console.log('[启动] 启动客户端...');
-    console.log(`[房间] 房间: ${roomId || '主房间（公共房间）'}`);
+    console.log(`[房间] ${roomId || '主房间(公共)'}`);
     console.log('');
     console.log('[手机] 手机访问:');
     console.log('─'.repeat(45));

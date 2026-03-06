@@ -174,7 +174,7 @@ function handleMessage(message) {
     
     switch (message.type) {
         case 'connected':
-            console.log(`[${ts()}] [连接] [${timestamp}] ${message.message}`);
+            console.log(`[${ts()}] [连接] ${message.message}`);
             break;
 
         case 'online':
@@ -187,7 +187,7 @@ function handleMessage(message) {
             const server_timestamp = message.timestamp || 0;
             const network_delay = receive_time - server_timestamp;
 
-            console.log(`\n[${ts()}] [消息] [${timestamp}] 收到来自 ${message.from} 的剪贴板:`);
+            console.log(`\n[${ts()}] [剪贴板] 收到来自 ${message.from}:`);
             console.log(`[${ts()}]    内容: ${message.text.substring(0, 100)}${message.text.length > 100 ? '...' : ''}`);
             if (server_timestamp > 0) {
                 console.log(`   [性能] 网络延迟: ${network_delay}ms (服务端发送时间: ${new Date(server_timestamp).toLocaleString('zh-CN')})`);
@@ -207,7 +207,7 @@ function handleMessage(message) {
             break;
 
         default:
-            console.log(`[${ts()}] [消息] 收到消息:`, message);
+            console.log(`[${ts()}] [消息] 未知类型:`, message);
     }
 }
 
