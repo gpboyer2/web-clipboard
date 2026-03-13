@@ -1,0 +1,983 @@
+
+        const API_BASE = window.location.origin;
+
+        // vconsole 初始化
+        (function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const debugParam = urlParams.get('debug');
+
+            let shouldEnableVConsole = window.VCONSOLE_DEFAULT_ENABLED === true;
+            if (debugParam !== null) {
+                shouldEnableVConsole = debugParam === 'true';
+            }
+
+            if (shouldEnableVConsole && typeof VConsole !== 'undefined') {
+                new VConsole();
+            }
+        })();
+
+        // 设备ID生成和获取（使用 localStorage 持久化）
+        function getDeviceId() {
+            const STORAGE_KEY = 'web_clipboard_device_id';
+            let device_id = localStorage.getItem(STORAGE_KEY);
+
+            if (!device_id) {
+                // 生成设备ID：web_时间戳_随机字符串
+                const timestamp = Date.now();
+                const random_str = Math.random().toString(36).substring(2, 8);
+                device_id = `web_${timestamp}_${random_str}`;
+                localStorage.setItem(STORAGE_KEY, device_id);
+                console.log('[设备ID] 已生成新设备ID', device_id);
+            } else {
+                console.log('[设备ID] 使用已有设备ID', device_id);
+            }
+
+            return device_id;
+        }
+
+        // 全局设备ID
+        const DEVICE_ID = getDeviceId();
+
+        // 从URL参数获取房间ID，不指定则为主房间
+        let urlParams = new URLSearchParams(window.location.search);
+        let rawRoomId = urlParams.get('room');
+        let ROOM_ID = isValidRoomId(rawRoomId) ? rawRoomId : '';
+        let ROOM_DISPLAY = ROOM_ID === '' ? '主房间' : ROOM_ID;
+
+        let ws = null;
+        let reconnectTimer = null;
+        let onlineCount = 0;
+
+        // 连接状态弹窗控制
+        let isFirstConnect = true;
+        let hasShownConnectError = false;
+        let reconnect_attempts = 0;
+
+        // WebSocket 连接
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = isValidRoomId(ROOM_ID)
+                ? `${protocol}//${window.location.host}?room=${encodeURIComponent(ROOM_ID)}&device_id=${encodeURIComponent(DEVICE_ID)}`
+                : `${protocol}//${window.location.host}?device_id=${encodeURIComponent(DEVICE_ID)}`;
+
+            try {
+                console.log('[WebSocket] 开始连接', {
+                    URL: wsUrl,
+                    房间ID: ROOM_ID,
+                    房间显示: ROOM_DISPLAY,
+                    设备ID: DEVICE_ID,
+                    时间: new Date().toISOString()
+                });
+
+                ws = new WebSocket(wsUrl);
+
+                ws.onopen = () => {
+                    console.log('[WebSocket] ✅ 已连接', {
+                        房间: ROOM_DISPLAY,
+                        时间: new Date().toISOString()
+                    });
+                    updateStatus('connected', `✅ 已连接到 房间 ${ROOM_DISPLAY}`);
+
+                    // 连接成功后发送设备ID
+                    ws.send(JSON.stringify({
+                        type: 'device',
+                        device_id: DEVICE_ID
+                    }));
+
+                    // 连接成功后重置重连次数和错误标记
+                    reconnect_attempts = 0;
+                    hasShownConnectError = false;
+
+                    // 只有首次连接才弹窗
+                    if (isFirstConnect) {
+                        // 判断是否为切换房间模式
+                        if (window.isSwitchingRoom) {
+                            showToast('已切换到新房间', 'success');
+                            window.isSwitchingRoom = false;
+                        } else {
+                            showToast('已连接到服务器', 'success');
+                        }
+                        isFirstConnect = false;
+                    }
+
+                    // 清除重连定时器
+                    if (reconnectTimer) {
+                        clearTimeout(reconnectTimer);
+                        reconnectTimer = null;
+                    }
+                };
+                
+                ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        handleWebSocketMessage(data);
+                    } catch (e) {
+                        console.error('解析消息失败:', e);
+                    }
+                };
+                
+                ws.onclose = () => {
+                    reconnect_attempts++;
+
+                    // 智能重连策略：0ms → 1s → 3s → 10s
+                    // 根据重连次数递增等待时间
+                    const reconnectDelay = calculateReconnectDelay(reconnect_attempts);
+
+                    console.log('[WebSocket] ❌ 断开连接', {
+                        时间: new Date().toISOString(),
+                        重连次数: reconnect_attempts,
+                        将在: `${reconnectDelay}ms 后重连`
+                    });
+                    updateStatus('error', '❌ 连接已断开');
+
+                    // 只在首次断开时弹窗提示
+                    if (!hasShownConnectError) {
+                        showToast('连接已断开，正在后台重连...', 'error');
+                        hasShownConnectError = true;
+                    }
+
+                    // 智能延迟后重连
+                    reconnectTimer = setTimeout(() => {
+                        console.log('[WebSocket] 开始重连', {
+                            重连次数: reconnect_attempts,
+                            时间: new Date().toISOString()
+                        });
+                        connectWebSocket();
+                    }, reconnectDelay);
+                };
+                
+                ws.onerror = (error) => {
+                    console.error('[WebSocket] ❌ 错误', {
+                        错误: error,
+                        时间: new Date().toISOString()
+                    });
+                    updateStatus('error', '❌ 连接错误');
+
+                    // 只在首次错误时弹窗提示
+                    if (!hasShownConnectError) {
+                        showToast('连接错误，正在后台重连...', 'error');
+                        hasShownConnectError = true;
+                    }
+                };
+            } catch (e) {
+                console.error('创建 WebSocket 失败:', e);
+                updateStatus('error', '❌ 无法连接');
+            }
+        }
+        
+        // 处理 WebSocket 消息
+        function handleWebSocketMessage(data) {
+            switch (data.type) {
+                case 'connected':
+                    console.log(`📡 ${data.message} (房间: ${data.roomId})`);
+                    break;
+
+                case 'online':
+                    onlineCount = data.count;
+                    updateStatus('connected', `✅ 已连接到 房间 ${ROOM_DISPLAY} (在线: ${onlineCount})`);
+                    break;
+
+                case 'clipboard':
+                    // 收到其他设备的剪贴板内容
+                    const textarea = document.getElementById('text');
+                    console.log('[同步] 收到剪贴板消息:', data.content);
+                    console.log('[同步] 当前输入框值:', textarea.value);
+                    // 只有当输入框为空时，才用收到的消息更新（避免覆盖用户正在输入的内容）
+                    if (textarea.value === '') {
+                        console.log('[同步] 输入框为空，更新内容');
+                        textarea.value = data.content;
+                    } else {
+                        console.log('[同步] 输入框非空，跳过更新');
+                    }
+                    // 刷新历史记录
+                    loadHistory();
+                    // 静默处理，不弹窗
+                    break;
+            }
+        }
+        
+        // 更新状态显示
+        function updateStatus(type, text) {
+            const status = document.getElementById('status');
+            status.textContent = text;
+            status.className = type === 'connected' ? 'status connected' : 'status error';
+        }
+
+        // 切换房间
+        function switchRoom() {
+            // 生成新的房间ID（使用时间戳）
+            const newRoomId = Date.now().toString();
+
+            // 显示"连接中"状态
+            updateStatus('', '连接中...');
+
+            // 关闭当前 WebSocket 连接
+            if (ws) {
+                ws.onclose = null; // 阻止自动重连
+                ws.close();
+                ws = null;
+            }
+
+            // 清除重连定时器
+            if (reconnectTimer) {
+                clearTimeout(reconnectTimer);
+                reconnectTimer = null;
+            }
+
+            // 更新房间信息
+            ROOM_ID = newRoomId;
+            ROOM_DISPLAY = newRoomId;
+
+            // 更新 URL 参数（不刷新页面）
+            const newUrl = new URL(window.location.href);
+            newUrl.searchParams.set('room', newRoomId);
+            window.history.pushState({}, '', newUrl);
+
+            // 更新 urlParams 变量
+            urlParams = new URLSearchParams(window.location.search);
+
+            // 重置连接状态
+            isFirstConnect = true;
+            hasShownConnectError = false;
+            reconnect_attempts = 0;
+
+            // 标记为切换房间模式（用于显示切换成功提示）
+            window.isSwitchingRoom = true;
+
+            // 重新连接 WebSocket
+            connectWebSocket();
+
+            // 清空输入框
+            document.getElementById('text').value = '';
+
+            // 清空历史记录显示（新房间没有历史）
+            document.getElementById('historySection').style.display = 'none';
+            document.getElementById('historyList').innerHTML = '';
+        }
+
+        // 检查连接（保留用于降级）
+        async function checkConnection() {
+            try {
+                const res = await fetch(`${API_BASE}/ping?device_id=${encodeURIComponent(DEVICE_ID)}`);
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    onlineCount = data.online || 0;
+                    updateStatus('connected', `✅ 服务器运行中 (在线: ${onlineCount})`);
+                }
+            } catch (e) {
+                updateStatus('error', '❌ 无法连接到服务器');
+            }
+        }
+
+        // 插入换行
+        function insertNewline() {
+            const textarea = document.getElementById('text');
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            const text = textarea.value;
+
+            textarea.value = text.substring(0, start) + '\n' + text.substring(end);
+            textarea.selectionStart = textarea.selectionEnd = start + 1;
+            textarea.focus();
+        }
+
+        // 发送并清空
+        async function sendAndClear() {
+            const textarea = document.getElementById('text');
+            const text = textarea.value;
+            if (!text.trim()) {
+                showToast('请输入内容');
+                textarea.focus();
+                return;
+            }
+
+            // 发送前先清空，避免被输入法复制
+            const textToSend = text;
+            textarea.value = '';
+
+            // 【重要】在发送前就保存到 localStorage，确保任何错误都不会丢失数据
+            const messageTimestamp = Date.now();
+            const messageId = messageTimestamp;
+            console.log('[发送流程] 开始发送', {
+                时间: new Date(messageTimestamp).toISOString(),
+                消息ID: messageId,
+                内容: textToSend.substring(0, 50)
+            });
+
+            saveLocalMessage(messageId, messageTimestamp, textToSend, 'pending');
+            console.log('[发送流程] 已保存到 localStorage', {
+                消息ID: messageId,
+                创建时间: messageTimestamp,
+                状态: 'pending'
+            });
+
+            // 立即刷新历史列表，显示"发送中"状态
+            console.log('[发送流程] 开始刷新历史列表');
+            await loadHistory();
+            console.log('[发送流程] 历史列表刷新完成');
+
+            try {
+                // 优先使用 WebSocket 发送
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    console.log('[发送流程] 使用 WebSocket 发送', {
+                        WebSocket状态: 'OPEN',
+                        UTC时间戳: messageTimestamp
+                    });
+
+                    ws.send(JSON.stringify({
+                        id: messageId,
+                        type: 'clipboard',
+                        content: textToSend,
+                        from: DEVICE_ID,
+                        create_at: messageTimestamp,
+                        room: ROOM_ID
+                    }));
+
+                    console.log('[发送流程] WebSocket 发送完成，1秒后检查状态');
+
+                    // WebSocket 即时发送，无需"发送中"提示
+
+                    // 等待 1 秒后检查是否真的发送成功
+                    setTimeout(() => {
+                        console.log('[发送流程] 开始检查发送状态', {
+                            消息ID: messageId,
+                            延迟: '1000ms'
+                        });
+                        checkSendStatus(messageId);
+                    }, 1000);
+
+                    // 保持键盘打开，重新聚焦
+                    textarea.focus();
+                    return;
+                }
+
+                // 降级到 HTTP 请求
+                console.log('[发送流程] WebSocket 不可用，使用 HTTP 发送', {
+                    WebSocket状态: ws ? `readyState=${ws.readyState}` : 'null',
+                    API: `${API_BASE}/send`
+                });
+
+                const res = await fetch(`${API_BASE}/send?device_id=${encodeURIComponent(DEVICE_ID)}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: messageId, content: textToSend, from: DEVICE_ID, create_at: messageTimestamp, room: ROOM_ID })
+                });
+                const data = await res.json();
+
+                console.log('[发送流程] HTTP 响应', {
+                    成功: data.success,
+                    消息: data.message,
+                    UTC时间戳: messageTimestamp
+                });
+
+                if (data.success) {
+                    showToast('发送成功', 'success');
+                    // 等待 1 秒后检查是否真的发送成功
+                    setTimeout(() => {
+                        console.log('[发送流程] 开始检查发送状态', {
+                            消息ID: messageId,
+                            延迟: '1000ms'
+                        });
+                        checkSendStatus(messageId);
+                    }, 1000);
+
+                    textarea.focus();
+                } else {
+                    console.error('[发送流程] HTTP 返回失败', data);
+                    showToast('发送失败，请在历史记录中重新发送', 'error');
+                    // 服务器返回失败，标记为失败
+                    updateLocalMessageStatus(messageId, 'failed');
+                    loadHistory();
+                    textarea.focus();
+                }
+            } catch (e) {
+                console.error('[发送流程] HTTP 请求异常', {
+                    错误: e.message,
+                    消息ID: messageId
+                });
+                showToast('网络错误，请在历史记录中重新发送', 'error');
+                // 任何异常（网络错误、超时等）都标记为失败，但数据已保存在 localStorage
+                updateLocalMessageStatus(messageId, 'failed');
+                loadHistory();
+                textarea.focus();
+            }
+        }
+
+        // 保存本地消息到 localStorage
+        function saveLocalMessage(id, create_at, content, status) {
+            const key = 'clipboard_local_messages';
+            const messages = JSON.parse(localStorage.getItem(key) || '[]');
+
+            // 添加新消息到开头
+            messages.unshift({
+                id: id,
+                create_at: create_at,
+                content: content,
+                status: status,
+                room: ROOM_ID
+            });
+
+            // 只保留最近 100 条
+            if (messages.length > 100) {
+                messages.splice(100);
+            }
+
+            localStorage.setItem(key, JSON.stringify(messages));
+        }
+
+        // 更新本地消息状态
+        function updateLocalMessageStatus(id, status) {
+            const key = 'clipboard_local_messages';
+            const messages = JSON.parse(localStorage.getItem(key) || '[]');
+
+            const msg = messages.find(m => m.id === id);
+            if (msg) {
+                msg.status = status;
+                localStorage.setItem(key, JSON.stringify(messages));
+            }
+        }
+
+        // 删除本地消息
+        function deleteLocalMessage(id) {
+            const key = 'clipboard_local_messages';
+            const messages = JSON.parse(localStorage.getItem(key) || '[]');
+            const filtered = messages.filter(m => m.id !== id);
+            localStorage.setItem(key, JSON.stringify(filtered));
+        }
+
+        // 清理损坏的本地消息数据
+        function cleanLocalMessages() {
+            const key = 'clipboard_local_messages';
+            const messages = JSON.parse(localStorage.getItem(key) || '[]');
+            
+            // 过滤掉缺少必要字段的损坏数据
+            const validMessages = messages.filter(msg => {
+                // 必须有 id、content 字段
+                return msg && msg.id !== undefined && msg.content !== undefined;
+            });
+
+            // 如果有损坏的数据，清理并保存
+            if (validMessages.length !== messages.length) {
+                const removedCount = messages.length - validMessages.length;
+                console.log(`[数据清理] 移除了 ${removedCount} 条损坏的本地消息`);
+                localStorage.setItem(key, JSON.stringify(validMessages));
+            }
+
+            return validMessages;
+        }
+
+        // 检查发送状态（与服务器对比）
+        async function checkSendStatus(messageId) {
+            const startTime = Date.now();
+            console.log('[状态检查] 开始', {
+                时间: new Date(startTime).toISOString(),
+                待检查消息ID: messageId
+            });
+
+            try {
+                const url = isValidRoomId(ROOM_ID)
+                    ? `${API_BASE}/history?room=${encodeURIComponent(ROOM_ID)}&device_id=${encodeURIComponent(DEVICE_ID)}`
+                    : `${API_BASE}/history?device_id=${encodeURIComponent(DEVICE_ID)}`;
+
+                console.log('[状态检查] 请求服务器历史', { URL: url });
+
+                const res = await fetch(url);
+                const data = await res.json();
+
+                console.log('[状态检查] 服务器响应', {
+                    成功: data.success,
+                    历史记录数: data.list ? data.list.length : 0,
+                    请求耗时: `${Date.now() - startTime}ms`
+                });
+
+                if (data.success) {
+                    // 【关键优化】如果服务器返回空列表，保持 pending 状态不变
+                    if (data.list.length === 0) {
+                        console.log('[状态检查] 服务器返回空列表，保持 pending 状态不变');
+                        return;
+                    }
+
+                    console.log('[状态检查] 开始ID匹配', {
+                        服务器记录数: data.list.length,
+                        待匹配消息ID: messageId
+                    });
+
+                    // 用 id 精确匹配
+                    const found = data.list.some(item => item.id === messageId);
+
+                    console.log('[状态检查] 匹配结果', {
+                        找到匹配: found,
+                        判断: found ? '发送成功' : '发送失败'
+                    });
+
+                    if (found) {
+                        // 发送成功，删除本地记录（因为服务器已经有了）
+                        console.log('[状态检查] 删除本地记录', { 消息ID: messageId });
+                        deleteLocalMessage(messageId);
+                    } else {
+                        // 只有在有历史记录但找不到匹配消息时，才标记为失败
+                        console.log('[状态检查] 标记为失败', { 消息ID: messageId });
+                        updateLocalMessageStatus(messageId, 'failed');
+                    }
+
+                    // 刷新历史记录显示
+                    console.log('[状态检查] 刷新历史列表');
+                    await loadHistory();
+                    console.log('[状态检查] 完成', { 总耗时: `${Date.now() - startTime}ms` });
+                }
+            } catch (e) {
+                // 网络错误时保持 pending 状态不变，不修改本地消息
+                console.error('[状态检查] 网络错误，保持 pending 状态', {
+                    错误: e.message,
+                    耗时: `${Date.now() - startTime}ms`
+                });
+            }
+        }
+
+        // 解析文件名时间戳（使用 UTC，与服务器一致）
+        function parseFilenameTimestamp(filename) {
+            const match = filename.match(/(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/);
+            if (match) {
+                const [, year, month, day, hour, min, sec] = match;
+                return Date.UTC(year, month - 1, day, hour, min, sec);
+            }
+            return 0;
+        }
+        
+        // 获取设备名称
+        function getDeviceName() {
+            const ua = navigator.userAgent;
+            if (/iPhone|iPad|iPod/i.test(ua)) return 'iPhone';
+            if (/Android/i.test(ua)) return 'Android';
+            if (/Mac/i.test(ua)) return 'Mac';
+            if (/Windows/i.test(ua)) return 'Windows';
+            return '未知设备';
+        }
+
+        // 插入文本
+        function insertText(text) {
+            const textarea = document.getElementById('text');
+            textarea.value = text;
+            textarea.focus();
+        }
+
+        // 显示提示
+        function showToast(msg, type = 'info', duration = 2000) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.className = 'toast show';
+
+            // 根据类型添加不同样式
+            if (type === 'success') {
+                toast.style.background = 'rgba(46, 125, 50, 0.9)';
+            } else if (type === 'error') {
+                toast.style.background = 'rgba(198, 40, 40, 0.9)';
+            } else {
+                toast.style.background = 'rgba(0, 0, 0, 0.8)';
+            }
+
+            setTimeout(() => {
+                toast.classList.remove('show');
+                toast.style.background = 'rgba(0, 0, 0, 0.8)';
+            }, duration);
+        }
+
+        // 加载历史记录
+        async function loadHistory() {
+            const startTime = Date.now();
+            console.log('[历史加载] 开始', { 时间: new Date(startTime).toISOString() });
+
+            try {
+                // 获取本地消息（包括未发送成功的），并清理损坏的数据
+                const localMessages = cleanLocalMessages();
+
+                console.log('[历史加载] 本地消息', {
+                    数量: localMessages.length,
+                    状态分布: localMessages.reduce((acc, msg) => {
+                        acc[msg.status] = (acc[msg.status] || 0) + 1;
+                        return acc;
+                    }, {})
+                });
+
+                // 获取服务器历史记录
+                const url = isValidRoomId(ROOM_ID)
+                    ? `${API_BASE}/history?room=${encodeURIComponent(ROOM_ID)}&device_id=${encodeURIComponent(DEVICE_ID)}`
+                    : `${API_BASE}/history?device_id=${encodeURIComponent(DEVICE_ID)}`;
+
+                console.log('[历史加载] 请求服务器', { URL: url });
+
+                const res = await fetch(url);
+                const data = await res.json();
+
+                console.log('[历史加载] 服务器响应', {
+                    成功: data.success,
+                    服务器记录数: data.list ? data.list.length : 0,
+                    请求耗时: `${Date.now() - startTime}ms`
+                });
+
+                if (data.success) {
+                    // 合并本地消息和服务器消息，去重
+                    console.log('[历史加载] 服务器返回数据', {
+                        服务器记录数: data.list ? data.list.length : 0,
+                        数据样本: data.list ? data.list.slice(0, 2) : []
+                    });
+
+                    console.log('[历史加载] 合并本地和服务器消息');
+                    const mergedList = mergeMessages(localMessages, data.list);
+
+                    console.log('[历史加载] 合并结果', {
+                        合并后记录数: mergedList.length,
+                        合并后样本: mergedList.slice(0, 2)
+                    });
+
+                    console.log('[历史加载] 渲染合并后的列表', {
+                        总记录数: mergedList.length,
+                        耗时: `${Date.now() - startTime}ms`
+                    });
+                    renderHistory(mergedList);
+                }
+            } catch (e) {
+                console.error('[历史加载] 服务器异常，只显示本地消息', {
+                    错误: e.message,
+                    耗时: `${Date.now() - startTime}ms`
+                });
+
+                showToast('服务器连接失败，只显示本地消息', 'error');
+
+                // 【重要】服务器连接失败时，也要显示本地消息（pending/failed），否则用户无法重新发送
+                const localMessages = cleanLocalMessages();
+
+                console.log('[历史加载] 渲染本地消息', {
+                    数量: localMessages.length
+                });
+
+                // 将本地消息转换为渲染格式
+                const renderList = localMessages.map(msg => ({
+                    local: true,
+                    id: msg.id,
+                    create_at: msg.create_at,
+                    content: msg.content,
+                    status: msg.status,
+                    preview: msg.content.split('\n').slice(0, 2).join('\n')
+                }));
+                renderHistory(renderList);
+            }
+        }
+
+        // 合并本地消息和服务器消息
+        function mergeMessages(localMessages, serverList) {
+            console.log('[消息合并] 开始', {
+                本地消息数: localMessages.length,
+                服务器消息数: serverList.length
+            });
+
+            const result = [];
+            const localMap = new Map(); // id -> local message
+
+            // 先把本地消息放入 Map
+            localMessages.forEach(msg => {
+                localMap.set(msg.id, msg);
+            });
+
+            console.log('[消息合并] 本地消息已放入 Map', {
+                Map大小: localMap.size
+            });
+
+            // 处理服务器消息
+            serverList.forEach(item => {
+                const matchedLocalMsg = localMap.get(item.id);
+
+                if (matchedLocalMsg) {
+                    console.log('[消息合并] 匹配成功', {
+                        消息ID: item.id,
+                        本地状态: matchedLocalMsg.status
+                    });
+
+                    // 找到匹配的本地消息，更新状态为 success
+                    result.push({
+                        local: true,
+                        id: item.id,
+                        create_at: item.create_at,
+                        content: item.content,
+                        status: 'success',
+                        preview: item.preview
+                    });
+                    // 从 Map 中移除，避免重复
+                    localMap.delete(item.id);
+                } else {
+                    console.log('[消息合并] 纯服务器消息', {
+                        消息ID: item.id
+                    });
+
+                    // 纯服务器消息
+                    result.push({
+                        local: false,
+                        id: item.id,
+                        create_at: item.create_at,
+                        content: item.content,
+                        preview: item.preview,
+                        status: 'success'
+                    });
+                }
+            });
+
+            // 添加剩余的本地消息（pending 和 failed 状态的）
+            console.log('[消息合并] 添加剩余本地消息', {
+                剩余数量: localMap.size,
+                状态分布: Array.from(localMap.values()).reduce((acc, msg) => {
+                    acc[msg.status] = (acc[msg.status] || 0) + 1;
+                    return acc;
+                }, {})
+            });
+
+            localMap.forEach(msg => {
+                console.log('[消息合并] 剩余本地消息', {
+                    消息ID: msg.id,
+                    状态: msg.status,
+                    内容预览: msg.content.substring(0, 30)
+                });
+
+                result.push({
+                    local: true,
+                    id: msg.id,
+                    create_at: msg.create_at,
+                    content: msg.content,
+                    status: msg.status,
+                    preview: msg.content
+                });
+            });
+
+            // 按创建时间排序（最新的在前面）
+            result.sort((a, b) => b.create_at - a.create_at);
+
+            console.log('[消息合并] 完成', {
+                合并后总数: result.length,
+                本地消息: result.filter(m => m.local).length,
+                服务器消息: result.filter(m => !m.local).length,
+                状态分布: result.reduce((acc, msg) => {
+                    acc[msg.status] = (acc[msg.status] || 0) + 1;
+                    return acc;
+                }, {})
+            });
+
+            // 只保留最近 20 条
+            return result.slice(0, 20);
+        }
+
+        // 格式化时间戳为文件名格式（使用 UTC）
+        function formatTimestamp(create_at) {
+            const date = new Date(create_at);
+            const year = date.getUTCFullYear();
+            const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+            const day = String(date.getUTCDate()).padStart(2, '0');
+            const hour = String(date.getUTCHours()).padStart(2, '0');
+            const min = String(date.getUTCMinutes()).padStart(2, '0');
+            const sec = String(date.getUTCSeconds()).padStart(2, '0');
+            return `${year}${month}${day}${hour}${min}${sec}.txt`;
+        }
+
+        // 渲染历史记录列表
+        function renderHistory(list) {
+            const container = document.getElementById('historySection');
+            const listEl = document.getElementById('historyList');
+            listEl.innerHTML = '';
+
+            if (list.length === 0) {
+                container.style.display = 'none';
+                return;
+            }
+
+            list.forEach(item => {
+                const timeStr = formatTime(item.create_at);
+                const statusHtml = getStatusHtml(item.status, item.local);
+                const div = document.createElement('div');
+                div.className = 'history-item';
+
+                // 如果是失败的本地消息，添加特殊样式
+                if (item.status === 'failed') {
+                    div.style.background = '#ffebee';
+                    div.style.borderColor = '#ef9a9a';
+                }
+
+                div.innerHTML = `
+                    <div class="history-preview">${escapeHtml(item.preview)}</div>
+                    <div class="history-time">${timeStr}${statusHtml}</div>
+                `;
+
+                // 点击事件：所有消息都可以重新发送
+                div.onclick = () => {
+                    if (item.status === 'failed' || item.status === 'pending') {
+                        resendLocalMessage(item);
+                    } else {
+                        resendHistory(item.content);
+                    }
+                };
+
+                listEl.appendChild(div);
+            });
+
+            container.style.display = 'block';
+        }
+
+        // 获取状态 HTML
+        function getStatusHtml(status, isLocal) {
+            if (!isLocal) return '';
+
+            const statusMap = {
+                'failed': '<span class="history-status failed">未发送成功，点击重新发送</span>',
+                'pending': '<span class="history-status pending">发送中...</span>',
+                'success': ''
+            };
+
+            return statusMap[status] || '';
+        }
+
+        // 重新发送本地消息（直接发送，不需要再点确定）
+        async function resendLocalMessage(item) {
+            // 显示"发送中"提示
+            showToast('重新发送中...', 'info');
+
+            // 直接重新发送，不需要填入输入框
+            const messageTimestamp = Date.now();
+            const messageId = messageTimestamp;
+            saveLocalMessage(messageId, messageTimestamp, item.content, 'pending');
+
+            // 更新旧消息状态为 pending（从列表中移除，避免重复）
+            deleteLocalMessage(item.id);
+            loadHistory();
+
+            try {
+                const res = await fetch(`${API_BASE}/send?device_id=${encodeURIComponent(DEVICE_ID)}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: messageId, content: item.content, from: DEVICE_ID, create_at: messageTimestamp, room: ROOM_ID })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    showToast('重新发送成功', 'success');
+                    // 等待 1 秒后检查是否真的发送成功
+                    setTimeout(() => {
+                        checkSendStatus(messageId);
+                    }, 1000);
+                } else {
+                    showToast('重新发送失败', 'error');
+                    updateLocalMessageStatus(messageId, 'failed');
+                    loadHistory();
+                }
+            } catch (e) {
+                showToast('重新发送失败', 'error');
+                updateLocalMessageStatus(messageId, 'failed');
+                loadHistory();
+            }
+        }
+
+        // 清空历史记录
+        async function clearHistory() {
+            if (!confirm('确定要清空当前房间的历史记录吗？此操作不可恢复。')) {
+                return;
+            }
+
+            try {
+                const url = isValidRoomId(ROOM_ID)
+                    ? `${API_BASE}/history?room=${encodeURIComponent(ROOM_ID)}&device_id=${encodeURIComponent(DEVICE_ID)}`
+                    : `${API_BASE}/history?device_id=${encodeURIComponent(DEVICE_ID)}`;
+
+                const res = await fetch(url, { method: 'DELETE' });
+                const data = await res.json();
+
+                if (data.status === 'success') {
+                    // 清空当前房间的本地消息
+                    const key = 'clipboard_local_messages';
+                    const messages = JSON.parse(localStorage.getItem(key) || '[]');
+                    const filtered = messages.filter(m => m.room !== ROOM_ID);
+                    localStorage.setItem(key, JSON.stringify(filtered));
+
+                    // 清空显示
+                    document.getElementById('historySection').style.display = 'none';
+                    document.getElementById('historyList').innerHTML = '';
+
+                    showToast('历史记录已清空', 'success');
+                } else {
+                    showToast(data.message || '清空失败', 'error');
+                }
+            } catch (e) {
+                console.error('[清空历史] 请求失败:', e);
+                showToast('清空失败，请检查网络连接', 'error');
+            }
+        }
+
+        // 格式化时间戳
+        function formatTime(create_at) {
+            if (!create_at) {
+                return '';
+            }
+            const date = new Date(create_at);
+            const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+            const day = String(date.getUTCDate()).padStart(2, '0');
+            const hour = String(date.getUTCHours()).padStart(2, '0');
+            const min = String(date.getUTCMinutes()).padStart(2, '0');
+            return `${month}/${day} ${hour}:${min}`;
+        }
+
+        // 转义 HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // 重新发送历史记录
+        async function resendHistory(content) {
+            try {
+                const res = await fetch(`${API_BASE}/send?device_id=${encodeURIComponent(DEVICE_ID)}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content: content, from: DEVICE_ID, room: ROOM_ID })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('重新发送成功', 'success');
+                    loadHistory();
+                } else {
+                    showToast('重新发送失败', 'error');
+                }
+            } catch (e) {
+                showToast('重新发送失败', 'error');
+            }
+        }
+
+        // 页面加载时连接 WebSocket
+        connectWebSocket();
+        
+        // 定期检查连接（降级）
+        setInterval(checkConnection, 30000);
+
+        // 自动聚焦并弹出键盘
+        window.addEventListener('load', () => {
+            document.getElementById('text').focus();
+            // 加载历史记录
+            loadHistory();
+        });
+
+        // 加载版本号
+        async function loadVersion() {
+            try {
+                const res = await fetch(`${API_BASE}/api/version?device_id=${encodeURIComponent(DEVICE_ID)}`);
+                const data = await res.json();
+                if (data.status === 'success' && data.datum?.version) {
+                    document.getElementById('versionBadge').textContent = `(v${data.datum.version})`;
+                }
+            } catch (e) {
+                console.error('加载版本号失败:', e);
+            }
+        }
+
+        loadVersion();
+        
+        // 页面关闭时断开 WebSocket
+        window.addEventListener('beforeunload', () => {
+            if (ws) {
+                ws.close();
+            }
+        });

@@ -1,0 +1,29 @@
+# 历史记录目录
+history/
+server/history/
+
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Node.js
+node_modules/
+
+# 构建输出
+dist/
+release-build/
+build/
+.nexe/
+/web-clipboard-win.exe
+
+# macOS
+.DS_Store
+
+# 服务器配置文档
+.server.md
+
+
+# 部署文档
+DEPLOY.md
+deploy.md

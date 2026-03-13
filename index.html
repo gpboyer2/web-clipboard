@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>剪贴板同步</title>
+    <link rel="stylesheet" href="./client/index.css">
+</head>
+<body>
+    <div class="container-wrapper">
+        <div class="container">
+        <h1>📱 剪贴板同步 <span class="version-badge" id="versionBadge"></span></h1>
+        <div class="status-container">
+            <div class="status" id="status">连接中...</div>
+            <button class="btn-switch-room" onclick="switchRoom()">切换房间</button>
+        </div>
+
+        <div class="input-wrapper">
+            <textarea id="text" placeholder="在这里输入要发送到 Mac 的文字..."></textarea>
+        </div>
+
+        <!-- 键盘工具栏 -->
+        <div class="keyboard-toolbar">
+            <button class="btn-newline" onclick="insertNewline()">⏎ 换行</button>
+            <button class="btn-confirm" onclick="sendAndClear()">✓ 确定发送</button>
+        </div>
+
+        <!-- 历史记录列表 -->
+        <div class="history-section" id="historySection" style="display: none;">
+            <div class="history-header-row">
+                <div class="history-header">历史记录</div>
+                <button class="btn-clear-history" onclick="clearHistory()">清空</button>
+            </div>
+            <div class="history-list" id="historyList"></div>
+        </div>
+
+        <!-- 快捷操作 -->
+        <div class="quick-actions">
+            <button class="quick-btn" onclick="insertText('我的邮箱是')">邮箱</button>
+            <button class="quick-btn" onclick="insertText('我的电话是')">电话</button>
+            <button class="quick-btn" onclick="insertText('我的地址是')">地址</button>
+            <button class="quick-btn" onclick="insertText(Date.now().toString())">时间戳</button>
+        </div>
+    </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>window.VCONSOLE_DEFAULT_ENABLED = true;</script>
+    <script src="https://cdn.jsdelivr.net/npm/vconsole@3.15.1/dist/vconsole.min.js"></script>
+    <script src="./client/utils-browser.js"></script>
+    <script src="./client/index.js"></script>
+</body>
+</html>

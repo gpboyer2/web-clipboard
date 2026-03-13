@@ -1,0 +1,65 @@
+{
+  "name": "web-clipboard",
+  "version": "0.0.2",
+  "description": "多设备实时同步剪贴板 - WebSocket 版本",
+  "main": "start-connect-remote.js",
+  "bin": {
+    "web-clipboard": "start-connect-remote.js"
+  },
+  "scripts": {
+    "start": "node local-dev/server-local.js",
+    "start:local": "node local-dev/server-local.js",
+    "start:remote": "node remote.js",
+    "client:mac": "node server/mac-clipboard-connector.js",
+    "client:windows": "node server/windows-clipboard-connector.js",
+    "dev:local": "nodemon local-dev/server-local.js",
+    "dev:remote": "nodemon remote.js",
+    "lint": "node -e \"console.log('No lint configured')\"",
+    "build:local": "bash scripts/local-release-build.sh",
+    "build:github": "bash scripts/github-release-build.sh"
+  },
+  "keywords": [
+    "clipboard",
+    "websocket",
+    "sync",
+    "real-time"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "execa": "^9.6.1",
+    "express": "^4.18.2",
+    "uuid": "^9.0.0",
+    "ws": "^8.14.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1",
+    "pkg": "^5.8.1"
+  },
+  "pkg": {
+    "scripts": [
+      "*.js",
+      "local-dev/**/*.js",
+      "server/**/*.js"
+    ],
+    "assets": [
+      "package.json",
+      "index.html",
+      "version-info.js",
+      "client/index.css",
+      "client/index.js",
+      "client/utils-browser.js",
+      "node_modules/**/*"
+    ],
+    "targets": [
+      "node18-macos-x64",
+      "node18-macos-arm64",
+      "node18-win-x64",
+      "node18-linux-x64"
+    ],
+    "outputPath": "release-build"
+  }
+}
