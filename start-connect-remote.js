@@ -8,7 +8,7 @@
  *   ROOM_ID=ABC123 node start-connect-remote.js # 环境变量
  *   pm2 start 0 -- ABC123                      # PM2 方式
  *   pm2 start 0 -- --room=ABC123               # PM2 方式
- *   pm2 start ./start-connect-remote.js -- --room="" --name web-clipboard
+ *   pm2 start ./start-connect-remote.js --name web-clipboard -- --room="" 
  */
 
 const path = require('path');
