@@ -22,7 +22,7 @@ const {
     startHeartbeat,
     setupGracefulExit,
     getRoomDisplay
-} = require('./local-dev/lib/server-common.js');
+} = require('./server/lib/server-common.js');
 
 const app = express();
 const server = http.createServer(app);

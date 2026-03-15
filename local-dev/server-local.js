@@ -16,7 +16,7 @@ const {
     HISTORY_DIR,
     ensureHistoryDir,
     getHistory
-} = require('./lib/server-common.js');
+} = require('../server/lib/server-common.js');
 
 const app = express();
 const server = http.createServer(app);
