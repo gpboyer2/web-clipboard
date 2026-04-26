@@ -1,8 +1,8 @@
 # 项目设置
 
-你专注于为位于中国大陆的中文用户提供所有服务。
-
 使用 Superpowers 进行所有开发工作。在会话开始时加载它。
+
+你专注于为位于中国大陆的中文用户提供所有服务。
 
 
 ## 调试指南（重要）
@@ -11,7 +11,7 @@
 
 查看方式：
 ```bash
-curl http://localhost:{PORT}/api/logs/frontend/query
+curl http://localhost:9200/api/logs/frontend/query
 ```
 返回格式（旧→新时间顺序）：
 ```json
@@ -90,6 +90,7 @@ const IconNetwork = () => (
 - 工作日报过度包装：用户要求输出工作日报给领导看时，你要抓住核心：做了什么、解决了什么问题、带来了什么价值。禁止使用"架构统一性""最后一公里""元数据驱动"等过度包装的技术术语，自问自答地拔高工作意义。直接说清楚问题和解决方案即可。
 - 测试代码中的"默认为成功"：测试的本质是验证，当无法判定响应状态时（如响应格式不符合预期），必须判定为失败，而不是默认成功。任何不确定的情况都应该被视为测试失败，成功必须是明确验证后的结果。
 - MCP 服务器配置格式错误：添加 chrome-devtools MCP 时，错误的配置把参数放在了 `command` 字段中（如 `"command": "chrome-devtools-mcp --browser-url=..."`），导致连接失败。正确做法是 `command` 只包含可执行命令，参数必须放在 `args` 数组中。修复方法：先 `claude mcp remove chrome-devtools` 删除错误的配置，然后用 `claude mcp add chrome-devtools -- npx -y chrome-devtools-mcp@latest --browser-url=http://127.0.0.1:9222` 重新添加。
+- 用户明确反感降级和旧版本兼容代码时，禁止默认添加任何降级处理、兜底分支或向旧版本兼容逻辑。优先直接修正当前系统、数据库、接口或配置本身；如果无法确认正确修复路径，必须先询问用户，不能擅自写兼容代码。
 - **复用分析缺乏影响范围评估**：你给出了"建议抽离 useSnapshotManager"等复用建议，但没有分析：
   1. 这个函数被哪些组件引用？
   2. 修改后需要同步更新哪些调用点？
@@ -199,10 +200,7 @@ function handleSelectItem(id: string) {
 
 | 领域 | 文档路径 | 描述 |
 |------|----------|------|
-| API 自动化测试 | `TEST_ARCHITECTURE.md` | 测试架构设计、status 字段定义规范、expect 验证规范、测试隔离策略 |
 | 数据库设计 | `DATABASE_SCHEMA.md` | 数据库表结构、字段定义、索引设计 |
-
-**重要**：在编写或修改测试相关代码前，必须先阅读 `TEST_ARCHITECTURE.md`。
 
 # 业务规范
 
@@ -740,39 +738,14 @@ async function loadLogicFlowCount() { }
 - 一个函数调用了2个或以上不同的 API → 必须拆分
 - 函数命名应该清晰表达它的目的（如 loadNodeBasicInfo、loadInterfaceCount）
 
-#### 前端错误处理规范（重要）
+### 文件拆分规范: 指组件或者业务代码
 
-**核心原则：后端已统一处理消息提示，前端 catch 块保持极简**
-
-后端通过响应的 `message` 字段统一返回错误信息，前端不需要复杂的错误类型判断。
-
-**正确做法**：
-```typescript
-// 简单处理：记录日志 + 显示错误消息
-catch (err: any) {
-  console.error('获取账户信息失败:', err);
-  showMessage('获取账户信息失败', 'error');
-}
-```
-
-**禁止的行为**：
-- 禁止在 catch 块中进行复杂的错误类型判断（如 instanceof、多层 if-else）
-- 禁止根据错误类型做不同处理分支
-- 禁止在 catch 块中调用多个接口或执行复杂逻辑
-- 禁止重新抛出错误（throw err）
-
-**原因**：后端已通过 apiSuccess/apiError 统一处理错误响应，message 字段包含完整错误信息。前端只需记录日志并显示提示，过度处理只会增加代码复杂度。
-
-### Vue 组件拆分规范
-
-组件行数阈值：
-- 单个 Vue 文件不超过 1000 行（含模板、脚本、样式）
-- 超过 1000 行必须拆分
+- 文件长度由专属 skill 维护，此处不设固定行数阈值
 
 拆分原则（单一职责、高内聚低耦合）：
 - 每个子组件只负责一个明确的功能或业务领域
 - 相关的数据和操作逻辑放在同一个组件内
-- 可复用的逻辑抽离到 composables
+- 可复用的逻辑抽离到全局或者相对路径下的 composables
 
 拆分方案要求：
 - 拆分后的组件层级结构（父组件 + 子组件命名/职责）
@@ -819,52 +792,9 @@ Swagger 文档组织：
 - 每个 Swagger 块之间 2 行空行
 
 
-## 5. Git 提交与推送规范（重要）
-
-### Commit 风格
+## 5. Git Commit 风格
 
 使用 Conventional Commits 格式
-
-### 提交与推送流程（强约束）
-
-**背景**：团队多人协作，推送时经常遇到冲突，需要一个稳定的流程保证代码同步。
-
-**强制流程**：
-
-```bash
-# 1. 本地提交（暂不推送）
-git commit
-
-# 2. 拉取远程并 rebase
-git pull --rebase
-
-# 3. 如有冲突，解决冲突
-#    - 手动编辑冲突文件
-#    - git add .
-#    - git rebase --continue   # 继续 rebase（不是重新拉取）
-
-# 4. 如果担心解决冲突期间有人推送，可再确认一次
-git pull --rebase
-
-# 5. 确认无误后推送
-git push
-```
-
-**关键命令说明**：
-
-| 命令 | 作用 |
-|------|------|
-| `git pull --rebase` | 拉取远程 + 将本地提交变基到远程之上 |
-| `git rebase --continue` | 冲突解决后，继续完成 rebase 操作 |
-
-**为什么用 rebase 而不是 merge**：
-- 提交历史线性、干净（没有 merge 产生的分叉）
-- 冲突在本地解决完再推送，远程历史整洁
-
-**禁止的行为**：
-- 禁止 commit 后直接 push（大概率被拒绝）
-- 禁止用 `git pull`（默认 merge）代替 `git pull --rebase`
-- 禁止冲突解决后跳过 `git rebase --continue`
 
 
 ## 6. HTML data-debug 调试属性规范

@@ -2,12 +2,14 @@
 // Mac 电脑端监听脚本
 // 连接服务器 WebSocket，自动同步剪贴板到系统
 
-const { exec } = require('child_process');
+const { exec, execFile } = require('child_process');
 const { promisify } = require('util');
 const { ts } = require('../utils.js');
 const { createClient } = require('./lib/client-common.js');
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
+const USER_ID = process.getuid ? process.getuid() : null;
 
 // 包装 exec 支持 stdin 输入
 function execWithInput(command, input) {
@@ -26,6 +28,39 @@ function execWithInput(command, input) {
     });
 }
 
+async function readClipboardWithCommands(commands, transform = (stdout) => stdout) {
+    for (const command of commands) {
+        try {
+            const { stdout } = await execAsync(command);
+            return transform(stdout);
+        } catch (err) {
+            console.error(`[${ts()}] [错误] 获取剪贴板失败: ${command}`, err.message);
+        }
+    }
+
+    return '';
+}
+
+async function writeClipboardByOsaScript(text) {
+    await execFileAsync('/usr/bin/osascript', [
+        '-e',
+        'on run {x}',
+        '-e',
+        'set the clipboard to x',
+        '-e',
+        'end run',
+        text
+    ]);
+}
+
+async function verifyClipboard(text) {
+    const clipboardText = await readClipboardWithCommands(
+        ["/usr/bin/osascript -e 'the clipboard as text'"],
+        (stdout) => stdout.replace(/\r?\n$/, '')
+    );
+    return clipboardText === text;
+}
+
 // 设置 Mac 剪贴板
 async function setClipboard(text) {
     if (typeof text !== 'string') {
@@ -37,25 +72,45 @@ async function setClipboard(text) {
         return true;
     }
 
-    try {
-        await execWithInput('pbcopy', text);
-        console.log(`[${ts()}] [OK] 已同步到系统剪贴板: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
-        return true;
-    } catch (err) {
-        console.error(`[${ts()}] [错误] 设置剪贴板失败:`, err.message);
-        return false;
+    const methods = [
+        {
+            name: '/usr/bin/osascript clipboard',
+            run: () => writeClipboardByOsaScript(text)
+        },
+        {
+            name: '/usr/bin/pbcopy',
+            run: () => execWithInput('/usr/bin/pbcopy', text)
+        },
+        USER_ID ? {
+            name: `/bin/launchctl asuser ${USER_ID} /usr/bin/pbcopy`,
+            run: () => execWithInput(`/bin/launchctl asuser ${USER_ID} /usr/bin/pbcopy`, text)
+        } : null
+    ].filter(Boolean);
+
+    for (const method of methods) {
+        try {
+            await method.run();
+            if (await verifyClipboard(text)) {
+                console.log(`[${ts()}] [OK] 已同步到系统剪贴板: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
+                return true;
+            }
+            console.error(`[${ts()}] [错误] 设置剪贴板失败: ${method.name} 写入后校验不一致`);
+        } catch (err) {
+            console.error(`[${ts()}] [错误] 设置剪贴板失败: ${method.name}`, err.message);
+        }
     }
+
+    throw new Error('所有剪贴板写入方式都失败');
 }
 
 // 获取 Mac 剪贴板
 async function getClipboard() {
-    try {
-        const { stdout } = await execAsync('pbpaste');
-        return stdout;
-    } catch (err) {
-        console.error(`[${ts()}] [错误] 获取剪贴板失败:`, err.message);
-        return '';
-    }
+    const commands = [
+        "/usr/bin/osascript -e 'the clipboard as text'",
+        '/usr/bin/pbpaste',
+        USER_ID ? `/bin/launchctl asuser ${USER_ID} /usr/bin/pbpaste` : null
+    ].filter(Boolean);
+    return readClipboardWithCommands(commands, (stdout) => stdout.replace(/\r?\n$/, ''));
 }
 
 // 配置服务器地址

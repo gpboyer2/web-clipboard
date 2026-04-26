@@ -12,6 +12,7 @@
     "start:remote": "node remote.js",
     "client:mac": "node server/mac-clipboard-connector.js",
     "client:windows": "node server/windows-clipboard-connector.js",
+    "client:log": "bash scripts/tail-client-log.sh",
     "dev:local": "nodemon local-dev/server-local.js",
     "dev:remote": "nodemon remote.js",
     "lint": "node -e \"console.log('No lint configured')\"",
